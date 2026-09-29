@@ -1,0 +1,155 @@
+{
+  "drizzles": {
+    "none": {
+      "label": "No drizzle",
+      "filter": null
+    },
+    "caramel": {
+      "label": "Caramel drizzle",
+      "filter": null
+    },
+    "dark-chocolate": {
+      "label": "Dark chocolate drizzle",
+      "filter": "drizzle-dark"
+    },
+    "white-chocolate": {
+      "label": "White chocolate drizzle",
+      "filter": "drizzle-white"
+    }
+  },
+  "foams": {
+    "none": {
+      "label": "No cold foam",
+      "filter": null
+    },
+    "chocolate": {
+      "label": "Chocolate cold foam",
+      "filter": null,
+      "asset": "asset-foam-chocolate"
+    },
+    "vanilla": {
+      "label": "Vanilla cold foam",
+      "filter": null,
+      "asset": "asset-foam-vanilla"
+    },
+    "salted-caramel": {
+      "label": "Salted caramel cold foam",
+      "filter": null,
+      "asset": "asset-foam-salted-caramel"
+    },
+    "cheesecake": {
+      "label": "Cheesecake cold foam",
+      "filter": null,
+      "asset": "asset-foam-cheesecake"
+    }
+  },
+  "dustings": {
+    "none": {
+      "label": "No topping",
+      "layer": null
+    },
+    "cinnamon": {
+      "label": "Cinnamon dusting",
+      "layer": "cinnamon"
+    },
+    "cocoa-powder": {
+      "label": "Cocoa powder dusting",
+      "layer": "cocoa-powder"
+    },
+    "cinnamon-sugar": {
+      "label": "Cinnamon sugar dusting",
+      "layer": "cinnamon-sugar"
+    },
+    "crushed-graham-crackers": {
+      "label": "Crushed graham crackers",
+      "layer": "crushed-graham-crackers"
+    },
+    "crushed-candy-cane": {
+      "label": "Crushed candy cane",
+      "layer": "crushed-candy-cane"
+    }
+  },
+  "bases": {
+    "none": {
+      "label": "No tea or coffee",
+      "plain": "empty",
+      "milk": "milk"
+    },
+    "espresso": {
+      "label": "Double espresso",
+      "plain": "espresso",
+      "milk": "latte"
+    },
+    "chai": {
+      "label": "Chai tea",
+      "plain": "chai",
+      "milk": "chai-milk"
+    },
+    "cold-brew": {
+      "label": "Cold brew",
+      "plain": "cold-brew",
+      "milk": "cold-brew-milk"
+    },
+    "matcha": {
+      "label": "Matcha",
+      "plain": "matcha",
+      "milk": "matcha-milk"
+    }
+  },
+  "sauces": {
+    "none": {
+      "label": "No mixed-in sauce",
+      "colour": "#ffffff",
+      "opacity": 0
+    },
+    "dark-chocolate": {
+      "label": "Dark chocolate mixed in",
+      "colour": "#482316",
+      "opacity": 0.19
+    },
+    "white-chocolate": {
+      "label": "White chocolate mixed in",
+      "colour": "#fff1d9",
+      "opacity": 0.18
+    },
+    "caramel": {
+      "label": "Caramel mixed in",
+      "colour": "#b9752c",
+      "opacity": 0.085
+    }
+  },
+  "syrups": {
+    "vanilla": {
+      "label": "Vanilla",
+      "sample": true
+    },
+    "caramel": {
+      "label": "Caramel",
+      "sample": true
+    },
+    "hazelnut": {
+      "label": "Hazelnut",
+      "sample": true
+    }
+  },
+  "milks": {
+    "none": {
+      "label": "No milk"
+    },
+    "2-percent": {
+      "label": "2% milk"
+    },
+    "oat": {
+      "label": "Oat milk"
+    },
+    "almond": {
+      "label": "Almond milk"
+    },
+    "protein": {
+      "label": "Protein milk"
+    },
+    "cream": {
+      "label": "Cream"
+    }
+  }
+}
