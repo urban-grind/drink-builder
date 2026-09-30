@@ -181,10 +181,8 @@ export function PhotoEntryForm() {
   return (
     <form className="ug-board flex flex-col gap-6" noValidate aria-busy={pending} onSubmit={onSubmit}>
       <div>
-        <h1 className="text-4xl sm:text-5xl">Add your photo</h1>
-        <p className="mt-3 max-w-2xl text-pretty">
-          A picture of your Urban Grind drink. One photo per email. Up to 25MB.
-        </p>
+        <h1 className="text-4xl sm:text-5xl">Snap yours</h1>
+        <p className="mt-3 max-w-2xl text-pretty">The drink in your hand. One photo.</p>
       </div>
 
       {uploadsEnabled === false ? (
