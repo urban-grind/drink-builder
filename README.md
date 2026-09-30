@@ -13,7 +13,26 @@ npm run dev
 
 The app listens on [http://127.0.0.1:43117](http://127.0.0.1:43117).
 
-Drinks and votes are stored in SQLite at `data/drinks.db`, created the first time the server runs.
+Drinks and votes are stored in SQLite at `data/drinks.db`, created the first time the server runs. Built-drink cup PNGs stay in `data/cups` on the server disk.
+
+## Photo contest
+
+A second board at `/photos`. People enter one real drink photo. The cafe approves it on `/photos/review` before it is public. The same email may already have a drink-builder entry. Those are separate. Email is stored and shown only on the review page.
+
+The browser sends the original, up to 25MB, straight to a private bucket with a short-lived presigned PUT locked to that size and to JPEG, PNG, WebP, or HEIC. This server never accepts the photo body. After the original is stored, this server makes a voting image (long edge about 1600px, WebP quality 85) and a smaller grid thumbnail with sharp. Phone rotation is fixed and location metadata is removed. The original file is left untouched. HEIC uses sharp when it can decode the file, and `heic-convert` when it cannot. The board loads only the thumbnail and the voting image.
+
+Cup photos are not moved to the bucket. If any R2 variable is missing, including the secret, photo upload returns a clear error and the drink builder keeps working.
+
+Set these in the host environment. Do not commit values.
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+- `R2_ENDPOINT`
+- `PHOTO_REVIEW_PASSWORD`
+
+The bucket needs a CORS rule that allows `PUT` from the site, with request headers `content-type` and `content-length`. Names and empty placeholders are in `.env.example`.
 
 ## Menu
 
