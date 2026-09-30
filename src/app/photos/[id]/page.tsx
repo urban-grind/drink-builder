@@ -3,7 +3,7 @@ import { PhotoDetail } from "@/components/photo-detail";
 
 export const metadata: Metadata = {
   title: "Photo",
-  description: "An approved drink photo from the contest board.",
+  description: "A drink photo from Urban Grind.",
 };
 
 export default async function PhotoPage({ params }: { params: Promise<{ id: string }> }) {

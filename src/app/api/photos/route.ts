@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     return jsonOk({ ...listPhotoBoard(voterId), uploadsEnabled: photosConfigured() });
   } catch (error) {
     console.error("Failed to list photos", safeErrorText(error));
-    return jsonError(500, "SERVER", "The photo board didn't load. Try again.");
+    return jsonError(500, "SERVER", "The photos didn't load. Try again.");
   }
 }
 

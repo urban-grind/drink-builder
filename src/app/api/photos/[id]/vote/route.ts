@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const messages = {
-  NOT_FOUND: "That photo isn't on the board.",
+  NOT_FOUND: "That photo isn't here.",
   ALREADY_VOTED: "You already voted for this photo.",
 } as const;
 

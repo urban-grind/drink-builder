@@ -72,7 +72,7 @@ export type PhotoValidationResult =
 
 export function validatePhotoEntry(input: unknown): PhotoValidationResult {
   if (!isRecord(input)) {
-    return { ok: false, message: "Send the entry as a set of fields.", fields: {} };
+    return { ok: false, message: "Check the form and try again.", fields: {} };
   }
 
   const fields: FieldErrors = {};
@@ -86,7 +86,7 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
   }
 
   const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : null;
-  if (!email) fields.email = "Add an email. It stays off the board.";
+  if (!email) fields.email = "Add your email.";
   else if (email.length > PHOTO_EMAIL_MAX || !EMAIL_PATTERN.test(email)) {
     fields.email = "Enter an email address like name@example.com.";
   }

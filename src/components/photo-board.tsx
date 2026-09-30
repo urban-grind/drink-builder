@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { HowItWorks } from "@/components/how-it-works";
 import { PhotoCard } from "@/components/photo-card";
 import { useVoter } from "@/components/use-voter";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils";
 function BoardSkeleton() {
   return (
     <div role="status" aria-live="polite" className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-      <p className="sr-only">Loading the photo board</p>
+      <p className="sr-only">Loading photos</p>
       {Array.from({ length: 3 }, (_, index) => (
         <div key={index} className="h-80 animate-pulse bg-white" />
       ))}
@@ -31,7 +32,7 @@ export function PhotoBoard() {
   const [newest, setNewest] = useState<PublicPhoto[]>([]);
   const [showAllPopular, setShowAllPopular] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("The photo board didn't load.");
+  const [error, setError] = useState("The photos didn't load.");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export function PhotoBoard() {
       .catch((caught) => {
         if (controller.signal.aborted) return;
         setStatus("error");
-        setError(caught instanceof ApiRequestError ? caught.message : "The photo board didn't load.");
+        setError(caught instanceof ApiRequestError ? caught.message : "The photos didn't load.");
       });
     return () => controller.abort();
   }, [ready, voterId, reloadKey]);
@@ -75,11 +76,10 @@ export function PhotoBoard() {
       <div className="relative overflow-hidden bg-[#274b3a] px-5 py-10 text-[#f3f2ef] sm:px-8 sm:py-14">
         <div aria-hidden="true" className="pointer-events-none absolute -top-16 right-0 size-56 rounded-full bg-[#1c3529]" />
         <div className="relative">
-          <p className="text-xs font-bold tracking-[0.22em] text-[#f3f2ef]/75 uppercase">Real drinks</p>
-          <h1 className="mt-3 text-5xl text-balance text-[#f3f2ef] sm:text-6xl">Photo contest</h1>
+          <p className="text-xs font-bold tracking-[0.22em] text-[#f3f2ef]/75 uppercase">Urban Grind</p>
+          <h1 className="mt-3 text-5xl text-balance text-[#f3f2ef] sm:text-6xl">Show your drink</h1>
           <p className="mt-4 max-w-2xl text-pretty text-[#f3f2ef]/90">
-            A photo of a drink you ordered. The cafe approves it, then it lands here. Most popular is the top three
-            by votes. See all opens the rest, still highest first. New lists the 10 newest photos.
+            A photo of what you ordered. Add it here.
           </p>
           <Link
             href="/photos/enter"
@@ -88,16 +88,18 @@ export function PhotoBoard() {
               "mt-6 inline-flex h-11 rounded-full bg-white px-5 text-[#274b3a] hover:bg-[#f3f2ef]",
             )}
           >
-            Enter a photo
+            Add your photo
           </Link>
         </div>
       </div>
+
+      <HowItWorks />
 
       {status === "loading" ? <BoardSkeleton /> : null}
 
       {status === "error" ? (
         <div role="alert" className="rounded-2xl bg-white px-5 py-8">
-          <h2 className="text-2xl">The photo board didn&apos;t load</h2>
+          <h2 className="text-2xl">The photos didn&apos;t load</h2>
           <p className="mt-2 max-w-lg">{error}</p>
           <Button
             type="button"
@@ -114,15 +116,13 @@ export function PhotoBoard() {
 
       {status === "ready" && popular.length === 0 ? (
         <div className="rounded-2xl bg-white px-5 py-10">
-          <h2 className="text-2xl">No photos on the board yet</h2>
-          <p className="mt-2 max-w-lg text-pretty">
-            Enter a photo of a drink. It shows up here after the cafe approves it.
-          </p>
+          <h2 className="text-2xl">No photos yet</h2>
+          <p className="mt-2 max-w-lg text-pretty">Yours can be the first.</p>
           <Link
             href="/photos/enter"
             className={cn(buttonVariants(), "mt-4 h-11 rounded-full bg-[#274b3a] px-4 text-white hover:bg-[#1e3b2e]")}
           >
-            Enter a photo
+            Add your photo
           </Link>
         </div>
       ) : null}
@@ -136,7 +136,7 @@ export function PhotoBoard() {
                   Most popular
                 </h2>
                 <p className="mt-1 text-sm">
-                  {showAllPopular ? "Every photo, highest votes first." : "Top three by votes."}
+                  {showAllPopular ? "Every photo, most votes first." : "Top three."}
                 </p>
               </div>
               {popular.length > 3 ? (
@@ -161,7 +161,7 @@ export function PhotoBoard() {
               <h2 id="new-photos" className="text-3xl">
                 New
               </h2>
-              <p className="mt-1 text-sm">The {newest.length} most recently approved photos.</p>
+              <p className="mt-1 text-sm">The latest photos.</p>
             </div>
             <ul className="grid list-none grid-cols-1 gap-3 lg:grid-cols-3">
               {newest.map((photo) => (

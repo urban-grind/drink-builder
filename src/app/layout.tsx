@@ -5,10 +5,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Drink Builder",
-    template: "%s · Drink Builder",
+    default: "Urban Grind",
+    template: "%s · Urban Grind",
   },
-  description: "Build a drink at the counter, publish it with your name, and let the board vote.",
+  description: "Photos of drinks from Urban Grind. Add yours.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -24,8 +24,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </main>
         <footer className="bg-[#274b3a] px-4 py-8 text-sm text-[#f3f2ef] sm:px-6">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <p>One drink per email.</p>
-            <p>Your email is stored and kept off the board.</p>
+            <p>One photo per email.</p>
+            <p>Your email stays private.</p>
           </div>
         </footer>
       </body>

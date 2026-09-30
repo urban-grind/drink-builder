@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  if (!isUuid(id)) return jsonError(404, "NOT_FOUND", "That photo isn't on the board.");
+  if (!isUuid(id)) return jsonError(404, "NOT_FOUND", "That photo isn't here.");
 
   const voterParam = new URL(request.url).searchParams.get("voterId");
   let voterId: string | null = null;
@@ -24,7 +24,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   try {
     const photo = getPublicPhoto(id, voterId);
-    if (!photo) return jsonError(404, "NOT_FOUND", "That photo isn't on the board.");
+    if (!photo) return jsonError(404, "NOT_FOUND", "That photo isn't here.");
     return jsonOk({ photo });
   } catch (error) {
     console.error("Failed to load photo", safeErrorText(error));

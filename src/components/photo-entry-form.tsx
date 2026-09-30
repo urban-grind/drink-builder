@@ -40,7 +40,7 @@ export function PhotoEntryForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "preparing">("idle");
-  const [done, setDone] = useState(false);
+  const [outcome, setOutcome] = useState<"pending" | "approved" | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,7 +132,7 @@ export function PhotoEntryForm() {
       }
 
       setPhase("preparing");
-      await requestJson<{ id: string }>("/api/photos", {
+      const saved = await requestJson<{ id: string; status?: string }>("/api/photos", {
         method: "POST",
         body: JSON.stringify({
           uploadId: currentUpload,
@@ -142,7 +142,7 @@ export function PhotoEntryForm() {
           caption: parsed.value.caption,
         }),
       });
-      setDone(true);
+      setOutcome(saved.status === "approved" ? "approved" : "pending");
     } catch (error) {
       if (error instanceof ApiRequestError) {
         const next = error.fields ?? {};
@@ -159,30 +159,31 @@ export function PhotoEntryForm() {
     }
   }
 
-  if (done) {
+  if (outcome) {
+    const drink = drinkName.trim() || "Your drink";
     return (
       <div className="ug-board rounded-2xl bg-white px-5 py-10 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl">The cafe has your photo</h1>
+        <h1 className="text-4xl">{outcome === "approved" ? "You're up" : "Thanks"}</h1>
         <p className="mt-3 max-w-lg text-pretty">
-          {drinkName.trim() || "Your drink"} stays off the board until they approve it. Your email is stored and is
-          not shown with the photo.
+          {outcome === "approved"
+            ? `${drink} is up. People can vote.`
+            : "We'll put your photo up after a look. Your email stays private."}
         </p>
-        <Link href="/photos" className="mt-6 inline-block text-sm underline-offset-4 hover:underline">
+        <Link href="/" className="mt-6 inline-block text-sm underline-offset-4 hover:underline">
           Back to the photos
         </Link>
       </div>
     );
   }
 
-  const buttonLabel = phase === "uploading" ? "Uploading…" : phase === "preparing" ? "Preparing…" : "Submit photo";
+  const buttonLabel = phase === "uploading" ? "Uploading…" : phase === "preparing" ? "Adding…" : "Add photo";
 
   return (
     <form className="ug-board flex flex-col gap-6" noValidate aria-busy={pending} onSubmit={onSubmit}>
       <div>
-        <h1 className="text-4xl sm:text-5xl">Enter a photo</h1>
+        <h1 className="text-4xl sm:text-5xl">Add your photo</h1>
         <p className="mt-3 max-w-2xl text-pretty">
-          JPEG, PNG, WebP, or HEIC. Up to 25MB. One photo per email. A drink you already published on the other board
-          does not use this entry. Your email stays off the public board.
+          A picture of your Urban Grind drink. One photo per email. Up to 25MB.
         </p>
       </div>
 
@@ -227,7 +228,7 @@ export function PhotoEntryForm() {
             autoComplete="name"
             aria-invalid={Boolean(fields.personName)}
             aria-describedby={fields.personName ? "photo-person-error" : undefined}
-            placeholder="The name with the photo"
+            placeholder="Your name"
             className="h-11"
           />
           {fields.personName ? (
@@ -250,11 +251,11 @@ export function PhotoEntryForm() {
             autoComplete="email"
             aria-invalid={Boolean(fields.email)}
             aria-describedby={fields.email ? `photo-email-error ${emailHelpId}` : emailHelpId}
-            placeholder="you@example.com"
+            placeholder="name@email.com"
             className="h-11"
           />
           <p id={emailHelpId} className="text-sm">
-            Stored with the photo. Not shown on the board. One photo per email.
+            We keep this private. It doesn&apos;t show with your photo.
           </p>
           {fields.email ? (
             <p id="photo-email-error" role="alert" className="text-sm text-destructive">
@@ -274,7 +275,7 @@ export function PhotoEntryForm() {
             autoComplete="off"
             aria-invalid={Boolean(fields.drinkName)}
             aria-describedby={fields.drinkName ? "photo-drink-error" : undefined}
-            placeholder="What was in the cup"
+            placeholder="What you ordered"
             className="h-11"
           />
           {fields.drinkName ? (
@@ -294,12 +295,12 @@ export function PhotoEntryForm() {
             maxLength={PHOTO_CAPTION_MAX}
             rows={3}
             aria-invalid={Boolean(fields.caption)}
-            aria-describedby={fields.caption ? "photo-caption-error photo-caption-help" : captionHelpId}
-            placeholder="Optional. A short line about the drink."
+            aria-describedby={fields.caption ? `photo-caption-error ${captionHelpId}` : captionHelpId}
+            placeholder="A line about it, if you want"
             className="min-h-24"
           />
           <p id={captionHelpId} className="text-sm">
-            Optional. {PHOTO_CAPTION_MAX} characters.
+            Optional.
           </p>
           {fields.caption ? (
             <p id="photo-caption-error" role="alert" className="text-sm text-destructive">

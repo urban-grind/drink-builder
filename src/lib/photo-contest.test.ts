@@ -33,6 +33,7 @@ const r2Keys = [
 function clearR2Env(): void {
   for (const key of r2Keys) delete process.env[key];
   delete process.env.PHOTO_REVIEW_PASSWORD;
+  delete process.env.PHOTO_SKIP_REVIEW;
 }
 
 class MemoryStorage implements PhotoStorage {
@@ -347,5 +348,57 @@ describe("photo contest", { concurrency: false }, () => {
     const back = moderatePhoto(saved.id, "approve");
     assert.equal(back.ok, true);
     assert.equal(listPhotoBoard(null).popular.length, 1);
+  });
+
+  it("publishes a new photo only when review is skipped outside production", async () => {
+    const source = await jpegWithGps();
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+
+    async function enter(email: string) {
+      const upload = await createUpload({ contentType: "image/jpeg", contentLength: source.bytes.length });
+      assert.equal(upload.ok, true);
+      if (!upload.ok) throw new Error("upload failed");
+      storage.objects.set(uploadKey(upload.uploadId), { body: source.bytes, contentType: "image/jpeg" });
+      return submitPhoto({
+        uploadId: upload.uploadId,
+        personName: "Cam",
+        email,
+        drinkName: "Cortado",
+        caption: "",
+      });
+    }
+
+    try {
+      delete process.env.PHOTO_SKIP_REVIEW;
+      delete env.NODE_ENV;
+      const held = await enter("held@example.com");
+      assert.equal(held.ok, true);
+      if (!held.ok) return;
+      assert.equal(held.status, "pending");
+      assert.equal(getPublicPhoto(held.id, null), null);
+
+      process.env.PHOTO_SKIP_REVIEW = "true";
+      const live = await enter("live@example.com");
+      assert.equal(live.ok, true);
+      if (!live.ok) return;
+      assert.equal(live.status, "approved");
+      assert.equal(
+        listPhotoBoard(null).popular.some((photo) => photo.id === live.id),
+        true,
+      );
+      assert.equal(JSON.stringify(listPhotoBoard(null)).includes("live@example.com"), false);
+
+      env.NODE_ENV = "production";
+      const locked = await enter("locked@example.com");
+      assert.equal(locked.ok, true);
+      if (!locked.ok) return;
+      assert.equal(locked.status, "pending");
+      assert.equal(getPublicPhoto(locked.id, null), null);
+    } finally {
+      delete process.env.PHOTO_SKIP_REVIEW;
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
   });
 });

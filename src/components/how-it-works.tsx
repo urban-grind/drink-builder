@@ -1,20 +1,20 @@
 const steps = [
   {
     number: "01",
-    title: "Build your drink",
-    body: "Start with a clear cup. Choose a base and a milk, then whatever belongs on top.",
+    title: "Snap your drink",
+    body: "The one in your hand, from the counter.",
     active: true,
   },
   {
     number: "02",
-    title: "It lands on the board",
-    body: "Publish it once. The cup shows up the way you made it.",
+    title: "Put it up",
+    body: "Your name and the drink. One photo per email.",
     active: false,
   },
   {
     number: "03",
     title: "Barrie votes",
-    body: "One vote on a drink. The cups people want rise to the top.",
+    body: "The ones people love move up.",
     active: false,
   },
 ] as const;
@@ -26,7 +26,7 @@ export function HowItWorks() {
         <h2 id="how-it-works" className="text-4xl sm:text-5xl">
           How it works
         </h2>
-        <p className="mt-3 max-w-2xl text-pretty">Three steps. Then the board takes it from here.</p>
+        <p className="mt-3 max-w-2xl text-pretty">Three steps.</p>
       </div>
       <ol className="grid list-none grid-cols-1 gap-4 lg:grid-cols-3">
         {steps.map((step) => (

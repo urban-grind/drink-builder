@@ -25,7 +25,7 @@ export function PhotoDetail({ id }: { id: string }) {
       .then((data) => {
         setPhoto(data.photo);
         setStatus("ready");
-        document.title = `${data.photo.drinkName} · Drink Builder`;
+        document.title = `${data.photo.drinkName} · Urban Grind`;
       })
       .catch((caught) => {
         if (controller.signal.aborted) return;
@@ -52,9 +52,9 @@ export function PhotoDetail({ id }: { id: string }) {
   if (status === "missing") {
     return (
       <div className="ug-board rounded-2xl bg-white px-6 py-10 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl">That photo isn&apos;t on the board</h1>
-        <p className="mt-2">It may still be waiting for the cafe, or the link is off.</p>
-        <Link href="/photos" className={cn(buttonVariants(), "mt-4 inline-flex h-11 rounded-full px-4")}>
+        <h1 className="text-4xl">That photo isn&apos;t here</h1>
+        <p className="mt-2">The link may be off.</p>
+        <Link href="/" className={cn(buttonVariants(), "mt-4 inline-flex h-11 rounded-full px-4")}>
           Back to the photos
         </Link>
       </div>
@@ -102,7 +102,7 @@ export function PhotoDetail({ id }: { id: string }) {
         <time dateTime={photo.createdAt} className="text-sm">
           {formatWhen(photo.createdAt)}
         </time>
-        <Link href="/photos" className="text-sm underline-offset-4 hover:underline">
+        <Link href="/" className="text-sm underline-offset-4 hover:underline">
           Back to the photos
         </Link>
       </div>

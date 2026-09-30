@@ -9,6 +9,16 @@ import type { FieldErrors } from "@/lib/types";
 const UPLOAD_TTL_MS = 30 * 60 * 1000;
 export const NEW_PHOTO_LIMIT = 10;
 
+/**
+ * Local preview only. Unset, empty, or anything other than true/1/yes stays off,
+ * so a new photo waits for cafe approval. Ignored when NODE_ENV is production.
+ */
+export function photoReviewBypassed(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  const value = process.env.PHOTO_SKIP_REVIEW?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 type UploadRow = {
   id: string;
   object_key: string;
@@ -191,7 +201,7 @@ export async function submitPhoto(input: {
   drinkName: unknown;
   caption: unknown;
 }): Promise<
-  | { ok: true; id: string; status: "pending" }
+  | { ok: true; id: string; status: "pending" | "approved" }
   | { ok: false; code: string; message: string; fields?: FieldErrors }
 > {
   const parsed = validatePhotoEntry(input);
@@ -214,7 +224,12 @@ export async function submitPhoto(input: {
     const existing = getDb()
       .prepare("SELECT id FROM photo_entries WHERE original_key = ?")
       .get(upload.object_key) as { id: string } | undefined;
-    if (existing) return { ok: true, id: existing.id, status: "pending" };
+    if (existing) {
+      const row = getDb()
+        .prepare("SELECT status FROM photo_entries WHERE id = ?")
+        .get(existing.id) as { status: string } | undefined;
+      return { ok: true, id: existing.id, status: row?.status === "approved" ? "approved" : "pending" };
+    }
     return { ok: false, code: "UPLOAD_USED", message: "That upload was already used. Choose the photo again." };
   }
 
@@ -274,27 +289,30 @@ export async function submitPhoto(input: {
       return {
         ok: false,
         code: "EMAIL_IN_USE",
-        message: "That email already entered the photo contest.",
-        fields: { email: "That email already entered the photo contest." },
+        message: "That email already has a photo in.",
+        fields: { email: "That email already has a photo in." },
       };
     }
 
     const now = new Date().toISOString();
+    const status: "pending" | "approved" = photoReviewBypassed() ? "approved" : "pending";
     db.prepare(
       `INSERT INTO photo_entries (
         id, person_name, email, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at
-      ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       photoId,
       parsed.value.personName,
       parsed.value.email,
       parsed.value.drinkName,
       parsed.value.caption,
+      status,
       upload.object_key,
       upload.content_type,
       voteKey,
       thumbKey,
       now,
+      status === "approved" ? now : null,
     );
     db.prepare("UPDATE photo_uploads SET consumed_at = ? WHERE id = ?").run(now, upload.id);
     db.exec("COMMIT");
@@ -308,14 +326,17 @@ export async function submitPhoto(input: {
       return {
         ok: false,
         code: "EMAIL_IN_USE",
-        message: "That email already entered the photo contest.",
-        fields: { email: "That email already entered the photo contest." },
+        message: "That email already has a photo in.",
+        fields: { email: "That email already has a photo in." },
       };
     }
     throw error;
   }
 
-  return { ok: true, id: photoId, status: "pending" };
+  const saved = getDb().prepare("SELECT status FROM photo_entries WHERE id = ?").get(photoId) as
+    | { status: string }
+    | undefined;
+  return { ok: true, id: photoId, status: saved?.status === "approved" ? "approved" : "pending" };
 }
 
 export function castPhotoVote(
