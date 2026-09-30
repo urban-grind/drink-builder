@@ -8,10 +8,16 @@ if (typeof window !== "undefined") {
 
 const globalForDb = globalThis as unknown as { drinkDb?: DatabaseSync };
 
+function databaseFile(): string {
+  const override = process.env.DRINK_DB_PATH?.trim();
+  if (override) return override;
+  return path.join(process.cwd(), "data", "drinks.db");
+}
+
 function createDatabase(): DatabaseSync {
-  const dir = path.join(process.cwd(), "data");
-  fs.mkdirSync(dir, { recursive: true });
-  const db = new DatabaseSync(path.join(dir, "drinks.db"));
+  const file = databaseFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const db = new DatabaseSync(file);
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -41,6 +47,7 @@ function createDatabase(): DatabaseSync {
   `);
   ensureMilkStoresChoice(db);
   ensureColdFoamColumn(db);
+  ensurePhotoTables(db);
   return db;
 }
 
@@ -98,14 +105,62 @@ function ensureColdFoamColumn(db: DatabaseSync): void {
   db.exec("ALTER TABLE drinks ADD COLUMN cold_foam TEXT NOT NULL DEFAULT ''");
 }
 
+function ensurePhotoTables(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS photo_uploads (
+      id TEXT PRIMARY KEY,
+      object_key TEXT NOT NULL UNIQUE,
+      content_type TEXT NOT NULL,
+      content_length INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      consumed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS photo_entries (
+      id TEXT PRIMARY KEY,
+      person_name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      drink_name TEXT NOT NULL,
+      caption TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      original_key TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      vote_key TEXT NOT NULL,
+      thumb_key TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      reviewed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS photo_votes (
+      photo_id TEXT NOT NULL,
+      voter_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (photo_id, voter_id),
+      FOREIGN KEY (photo_id) REFERENCES photo_entries(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_photo_votes_voter ON photo_votes (voter_id);
+    CREATE INDEX IF NOT EXISTS idx_photo_entries_status ON photo_entries (status, created_at);
+  `);
+}
+
 export function getDb(): DatabaseSync {
   if (!globalForDb.drinkDb) {
     globalForDb.drinkDb = createDatabase();
   } else {
     ensureMilkStoresChoice(globalForDb.drinkDb);
     ensureColdFoamColumn(globalForDb.drinkDb);
+    ensurePhotoTables(globalForDb.drinkDb);
   }
   return globalForDb.drinkDb;
+}
+
+/** Closes the cached connection so tests can point DRINK_DB_PATH at a fresh file. */
+export function resetDbForTests(): void {
+  const db = globalForDb.drinkDb as { close?: () => void } | undefined;
+  globalForDb.drinkDb = undefined;
+  try {
+    db?.close?.();
+  } catch {
+    // Already closed.
+  }
 }
 
 export function beginImmediate(): DatabaseSync {

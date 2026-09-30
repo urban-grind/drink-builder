@@ -19,6 +19,7 @@ export function SiteHeader() {
   const buildActive = pathname === "/";
   const boardActive =
     pathname === "/drinks" || (pathname.startsWith("/drinks/") && !pathname.endsWith("/congrats"));
+  const photosActive = pathname === "/photos" || pathname.startsWith("/photos/");
   const myDrinkActive =
     pathname === "/my-drink" || (myDrinkId !== null && pathname === `/drinks/${myDrinkId}/congrats`);
 
@@ -46,6 +47,13 @@ export function SiteHeader() {
             className={menuItemClass(boardActive)}
           >
             The board
+          </Link>
+          <Link
+            href="/photos"
+            aria-current={photosActive ? "page" : undefined}
+            className={menuItemClass(photosActive)}
+          >
+            Photos
           </Link>
         </nav>
       </div>
