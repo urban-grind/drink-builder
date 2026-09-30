@@ -22,10 +22,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <main id="content" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 outline-none sm:px-6 sm:py-12">
           {children}
         </main>
-        <footer className="bg-[#274b3a] px-4 py-8 text-sm text-[#f3f2ef] sm:px-6">
-          <div className="mx-auto flex max-w-6xl flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <p>One photo per email.</p>
-            <p>Your email stays private.</p>
+        <footer className="bg-[#274b3a] text-[#f3f2ef]">
+          <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-10 sm:flex-row sm:items-end sm:justify-between lg:px-8">
+            <p className="font-heading text-2xl leading-none sm:text-3xl">Urban Grind Coffee Co.</p>
+            <p className="text-sm tracking-wide">Barrie</p>
           </div>
         </footer>
       </body>

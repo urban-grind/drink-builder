@@ -7,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function PhotoEnterPage() {
-  return <PhotoEntryForm />;
+  return (
+    <div className="mx-auto w-full max-w-3xl">
+      <PhotoEntryForm />
+    </div>
+  );
 }
