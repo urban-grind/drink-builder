@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OpenUploadButton } from "@/components/upload-dialog";
 
 export function SiteHeader() {
   return (
@@ -7,12 +8,9 @@ export function SiteHeader() {
         <Link href="/" className="font-heading text-[1.7rem] leading-none tracking-tight text-[#274b3a] sm:text-3xl">
           Urban Grind
         </Link>
-        <Link
-          href="/photos/enter"
-          className="inline-flex items-center rounded-full bg-[#274b3a] px-5 py-2.5 text-sm font-bold text-[#f3f2ef] shadow-md transition-colors hover:bg-[#1e3b2e] sm:px-7 sm:py-3"
-        >
-          Add your photo
-        </Link>
+        <OpenUploadButton className="inline-flex items-center rounded-full bg-[#274b3a] px-4 py-2.5 text-xs font-bold tracking-[0.12em] text-[#f3f2ef] uppercase shadow-md transition-colors hover:bg-[#1e3b2e] sm:px-6 sm:py-3 sm:text-sm">
+          Upload a photo
+        </OpenUploadButton>
       </div>
     </header>
   );

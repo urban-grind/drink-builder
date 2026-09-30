@@ -17,7 +17,9 @@ import {
   moderatePhoto,
   submitPhoto,
 } from "@/lib/photos";
+import { firstName, photoEntryPath } from "@/lib/first-name";
 import { parsePhotoUploadRequest, validatePhotoEntry } from "@/lib/photo-validation";
+import { RESIZE_LIMIT, withResizeSlot } from "@/lib/resize-queue";
 import { getPhotoStorage, readR2Config, setPhotoStorageForTests, type PhotoStorage } from "@/lib/r2";
 
 process.env.DRINK_DB_PATH = path.join(os.tmpdir(), `urban-grind-photos-${process.pid}.sqlite`);
@@ -134,6 +136,29 @@ describe("photo contest", { concurrency: false }, () => {
     }
     clearR2Env();
     setPhotoStorageForTests(storage);
+  });
+
+  it("shows a first name on an entry path", () => {
+    assert.equal(firstName("Barrie Smith"), "Barrie");
+    assert.equal(firstName("  Ada  "), "Ada");
+    assert.equal(photoEntryPath("11111111-1111-4111-8111-111111111111"), "/photos/11111111-1111-4111-8111-111111111111");
+  });
+
+  it("queues resizes so only two run at once", async () => {
+    let active = 0;
+    let peak = 0;
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        withResizeSlot(async () => {
+          active += 1;
+          peak = Math.max(peak, active);
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          active -= 1;
+        }),
+      ),
+    );
+    assert.equal(peak, RESIZE_LIMIT);
+    assert.equal(RESIZE_LIMIT, 2);
   });
 
   it("locks the presigned PUT to the content type and byte length", async () => {

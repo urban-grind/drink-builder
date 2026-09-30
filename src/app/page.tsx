@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { PhotoBoard } from "@/components/photo-board";
 
 export const metadata: Metadata = {
-  title: "This one's mine",
-  description: "Snap it and put it up.",
+  title: "Show us your cup",
+  description: "Your drink moment. Snap it, name it, and Barrie votes.",
 };
 
 export default function HomePage() {

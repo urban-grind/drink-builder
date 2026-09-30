@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { PhotoShare } from "@/components/photo-share";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,19 +16,27 @@ import {
   normalizePhotoType,
   validatePhotoEntry,
 } from "@/lib/photo-validation";
+import { photoEntryPath } from "@/lib/first-name";
 import type { FieldErrors } from "@/lib/types";
 
-const fieldIds: Record<string, string> = {
-  photo: "photo-file",
-  personName: "photo-person-name",
-  email: "photo-email",
-  drinkName: "photo-drink-name",
-  caption: "photo-caption",
-};
-
-export function PhotoEntryForm() {
+export function PhotoEntryForm({
+  presentation = "page",
+  onFinished,
+}: {
+  presentation?: "page" | "dialog";
+  onFinished?: () => void;
+}) {
+  const router = useRouter();
+  const baseId = useId();
   const captionHelpId = useId();
   const emailHelpId = useId();
+  const fieldIds: Record<string, string> = {
+    photo: `${baseId}-file`,
+    personName: `${baseId}-name`,
+    email: `${baseId}-email`,
+    drinkName: `${baseId}-drink`,
+    caption: `${baseId}-caption`,
+  };
   const [personName, setPersonName] = useState("");
   const [email, setEmail] = useState("");
   const [drinkName, setDrinkName] = useState("");
@@ -39,8 +49,8 @@ export function PhotoEntryForm() {
   const [fields, setFields] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "uploading" | "preparing">("idle");
   const [outcome, setOutcome] = useState<"pending" | "approved" | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -111,7 +121,6 @@ export function PhotoEntryForm() {
       if (!contentType) throw new ApiRequestError("VALIDATION", "Use a JPEG, PNG, WebP, or HEIC photo.");
 
       if (!currentUpload) {
-        setPhase("uploading");
         const presign = await requestJson<{ uploadId: string; uploadUrl: string; contentType: string }>(
           "/api/photos/upload",
           {
@@ -131,7 +140,6 @@ export function PhotoEntryForm() {
         setUploadId(presign.uploadId);
       }
 
-      setPhase("preparing");
       const saved = await requestJson<{ id: string; status?: string }>("/api/photos", {
         method: "POST",
         body: JSON.stringify({
@@ -142,7 +150,13 @@ export function PhotoEntryForm() {
           caption: parsed.value.caption,
         }),
       });
-      setOutcome(saved.status === "approved" ? "approved" : "pending");
+      if (saved.status === "approved") {
+        onFinished?.();
+        router.push(photoEntryPath(saved.id));
+        return;
+      }
+      setSavedId(saved.id);
+      setOutcome("pending");
     } catch (error) {
       if (error instanceof ApiRequestError) {
         const next = error.fields ?? {};
@@ -155,20 +169,24 @@ export function PhotoEntryForm() {
         setFormError("The photo didn't go through. Try again.");
       }
       setPending(false);
-      setPhase("idle");
     }
   }
 
-  if (outcome) {
+  if (outcome && savedId) {
     const drink = drinkName.trim() || "Your drink";
     return (
-      <div className="ug-board rounded-2xl bg-white px-5 py-10 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl">{outcome === "approved" ? "You're up" : "Thanks"}</h1>
+      <div className="ug-board rounded-2xl bg-white px-5 py-8 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
+        <h1 className="text-4xl">Thanks</h1>
         <p className="mt-3 max-w-lg text-pretty">
-          {outcome === "approved"
-            ? `${drink} is up. People can vote.`
-            : "We'll put your photo up after a look. Your email stays private."}
+          We&apos;ll put {drink} up after a look. Your email stays private. This link is yours.
         </p>
+        <div className="mt-6">
+          <PhotoShare
+            drinkName={drink}
+            photoUrl={preview ?? ""}
+            entryPath={photoEntryPath(savedId)}
+          />
+        </div>
         <Link href="/" className="mt-6 inline-block text-sm underline-offset-4 hover:underline">
           Back to the photos
         </Link>
@@ -176,14 +194,18 @@ export function PhotoEntryForm() {
     );
   }
 
-  const buttonLabel = phase === "uploading" ? "Uploading…" : phase === "preparing" ? "Adding…" : "Add photo";
+  const buttonLabel = pending ? "Your photo is going up" : "Add photo";
 
   return (
     <form className="ug-board flex flex-col gap-6" noValidate aria-busy={pending} onSubmit={onSubmit}>
-      <div>
-        <h1 className="text-4xl sm:text-5xl">Snap yours</h1>
-        <p className="mt-3 max-w-2xl text-pretty">The drink in your hand. One photo.</p>
-      </div>
+      {presentation === "page" ? (
+        <div>
+          <h1 className="text-4xl sm:text-5xl">Snap yours</h1>
+          <p className="mt-3 max-w-2xl text-pretty">The drink in your hand. One photo.</p>
+        </div>
+      ) : (
+        <p className="text-pretty">The drink in your hand. One photo.</p>
+      )}
 
       {uploadsEnabled === false ? (
         <p role="status" className="rounded-2xl bg-white px-4 py-3 text-sm">
@@ -193,15 +215,15 @@ export function PhotoEntryForm() {
 
       <div className="grid gap-5 rounded-2xl bg-white p-5 shadow-[0_16px_40px_rgb(39_75_58/0.06)] sm:p-6">
         <div className="grid gap-2">
-          <Label htmlFor="photo-file">Photo</Label>
+          <Label htmlFor={fieldIds.photo}>Photo</Label>
           <input
-            id="photo-file"
+            id={fieldIds.photo}
             name="photo"
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
             className="block w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#274b3a] file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
             aria-invalid={Boolean(fields.photo)}
-            aria-describedby={fields.photo ? "photo-file-error" : undefined}
+            aria-describedby={fields.photo ? `${fieldIds.photo}-error` : undefined}
             onChange={(event) => onFile(event.target.files?.[0] ?? null)}
           />
           {preview ? (
@@ -209,37 +231,37 @@ export function PhotoEntryForm() {
             <img src={preview} alt="Selected drink" className="max-h-80 w-full rounded-2xl object-contain" />
           ) : null}
           {fields.photo ? (
-            <p id="photo-file-error" role="alert" className="text-sm text-destructive">
+            <p id={`${fieldIds.photo}-error`} role="alert" className="text-sm text-destructive">
               {fields.photo}
             </p>
           ) : null}
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="photo-person-name">Your name</Label>
+          <Label htmlFor={fieldIds.personName}>Your name</Label>
           <Input
-            id="photo-person-name"
+            id={fieldIds.personName}
             name="personName"
             value={personName}
             onChange={(event) => setPersonName(event.target.value)}
             maxLength={PHOTO_NAME_MAX}
             autoComplete="name"
             aria-invalid={Boolean(fields.personName)}
-            aria-describedby={fields.personName ? "photo-person-error" : undefined}
+            aria-describedby={fields.personName ? `${fieldIds.personName}-error` : undefined}
             placeholder="Your name"
             className="h-11"
           />
           {fields.personName ? (
-            <p id="photo-person-error" role="alert" className="text-sm text-destructive">
+            <p id={`${fieldIds.personName}-error`} role="alert" className="text-sm text-destructive">
               {fields.personName}
             </p>
           ) : null}
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="photo-email">Email</Label>
+          <Label htmlFor={fieldIds.email}>Email</Label>
           <Input
-            id="photo-email"
+            id={fieldIds.email}
             name="email"
             type="email"
             inputMode="email"
@@ -248,7 +270,7 @@ export function PhotoEntryForm() {
             maxLength={254}
             autoComplete="email"
             aria-invalid={Boolean(fields.email)}
-            aria-describedby={fields.email ? `photo-email-error ${emailHelpId}` : emailHelpId}
+            aria-describedby={fields.email ? `${fieldIds.email}-error ${emailHelpId}` : emailHelpId}
             placeholder="name@email.com"
             className="h-11"
           />
@@ -256,44 +278,44 @@ export function PhotoEntryForm() {
             We keep this private. It doesn&apos;t show with your photo.
           </p>
           {fields.email ? (
-            <p id="photo-email-error" role="alert" className="text-sm text-destructive">
+            <p id={`${fieldIds.email}-error`} role="alert" className="text-sm text-destructive">
               {fields.email}
             </p>
           ) : null}
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="photo-drink-name">Drink name</Label>
+          <Label htmlFor={fieldIds.drinkName}>Drink name</Label>
           <Input
-            id="photo-drink-name"
+            id={fieldIds.drinkName}
             name="drinkName"
             value={drinkName}
             onChange={(event) => setDrinkName(event.target.value)}
             maxLength={PHOTO_NAME_MAX}
             autoComplete="off"
             aria-invalid={Boolean(fields.drinkName)}
-            aria-describedby={fields.drinkName ? "photo-drink-error" : undefined}
+            aria-describedby={fields.drinkName ? `${fieldIds.drinkName}-error` : undefined}
             placeholder="What you ordered"
             className="h-11"
           />
           {fields.drinkName ? (
-            <p id="photo-drink-error" role="alert" className="text-sm text-destructive">
+            <p id={`${fieldIds.drinkName}-error`} role="alert" className="text-sm text-destructive">
               {fields.drinkName}
             </p>
           ) : null}
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="photo-caption">Caption</Label>
+          <Label htmlFor={fieldIds.caption}>Caption</Label>
           <Textarea
-            id="photo-caption"
+            id={fieldIds.caption}
             name="caption"
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
             maxLength={PHOTO_CAPTION_MAX}
             rows={3}
             aria-invalid={Boolean(fields.caption)}
-            aria-describedby={fields.caption ? `photo-caption-error ${captionHelpId}` : captionHelpId}
+            aria-describedby={fields.caption ? `${fieldIds.caption}-error ${captionHelpId}` : captionHelpId}
             placeholder="A line about it, if you want"
             className="min-h-24"
           />
@@ -301,11 +323,17 @@ export function PhotoEntryForm() {
             Optional.
           </p>
           {fields.caption ? (
-            <p id="photo-caption-error" role="alert" className="text-sm text-destructive">
+            <p id={`${fieldIds.caption}-error`} role="alert" className="text-sm text-destructive">
               {fields.caption}
             </p>
           ) : null}
         </div>
+
+        {pending ? (
+          <p role="status" className="text-base font-bold">
+            Your photo is going up.
+          </p>
+        ) : null}
 
         {formError ? (
           <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">

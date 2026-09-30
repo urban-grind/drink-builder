@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { PhotoShare } from "@/components/photo-share";
 import { PhotoVoteButton } from "@/components/photo-vote-button";
 import { useVoter } from "@/components/use-voter";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { firstName } from "@/lib/first-name";
 import type { PublicPhoto } from "@/lib/photo-types";
 import { formatWhen } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -85,12 +87,12 @@ export function PhotoDetail({ id }: { id: string }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photo.imageUrl}
-        alt={`${photo.drinkName} by ${photo.personName}`}
+        alt={`${photo.drinkName} by ${firstName(photo.personName)}`}
         className="w-full rounded-2xl bg-white object-contain shadow-[0_16px_40px_rgb(39_75_58/0.06)]"
       />
       <div className="flex flex-col gap-4 rounded-2xl bg-white px-5 py-6 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
         <h1 className="text-4xl text-balance">{photo.drinkName}</h1>
-        <p>{photo.personName}</p>
+        <p>{firstName(photo.personName)}</p>
         {photo.caption ? <p className="text-pretty">{photo.caption}</p> : null}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm">
@@ -99,6 +101,7 @@ export function PhotoDetail({ id }: { id: string }) {
           </p>
           <PhotoVoteButton photo={photo} onUpdated={setPhoto} />
         </div>
+        <PhotoShare drinkName={photo.drinkName} photoUrl={photo.imageUrl} entryPath={`/photos/${photo.id}`} />
         <time dateTime={photo.createdAt} className="text-sm">
           {formatWhen(photo.createdAt)}
         </time>

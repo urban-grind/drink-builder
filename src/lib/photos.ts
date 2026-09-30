@@ -1,5 +1,6 @@
 import { beginImmediate, getDb, isUniqueConstraint, rollbackQuietly } from "@/lib/db";
 import { contentTypeMatches, detectImageType, makeBoardImages } from "@/lib/photo-image";
+import { withResizeSlot } from "@/lib/resize-queue";
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
 import type { PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
@@ -264,7 +265,7 @@ export async function submitPhoto(input: {
     return { ok: false, code: "NOT_AN_IMAGE", message: "That file isn't a JPEG, PNG, WebP, or HEIC photo." };
   }
 
-  const images = await makeBoardImages(original);
+  const images = await withResizeSlot(() => makeBoardImages(original));
   if ("error" in images) {
     markConsumed(upload.id);
     await deleteQuietly(storage, upload.object_key);
