@@ -18,7 +18,9 @@ export function PhotoLeaderboard({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    requestJson<{ photos: LeaderboardEntry[] }>("/api/photos/leaderboard", { signal: controller.signal })
+    requestJson<{ photos: LeaderboardEntry[] }>(`/api/photos/leaderboard?t=${Date.now()}`, {
+      signal: controller.signal,
+    })
       .then((data) => {
         setPhotos(data.photos);
         setStatus("ready");

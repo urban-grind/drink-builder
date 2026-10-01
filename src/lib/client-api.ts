@@ -24,7 +24,8 @@ export async function requestJson<T>(input: string, init?: RequestInit): Promise
         ...init?.headers,
       },
     });
-  } catch {
+  } catch (caught) {
+    if (caught instanceof Error && caught.name === "AbortError") throw caught;
     throw new ApiRequestError(
       "NETWORK",
       "Can't reach the counter. Check your connection and try again.",

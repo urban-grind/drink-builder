@@ -56,7 +56,7 @@ export function PhotoDeck() {
   const { voterId, ready } = useVoter();
   const [photos, setPhotos] = useState<PublicPhoto[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("The photos didn't load.");
+  const [error, setError] = useState("");
   const [last, setLast] = useState<{ photo: PublicPhoto; action: "vote" | "skip" } | null>(null);
   const [dragX, setDragX] = useState(0);
   const [flight, setFlight] = useState<Flight>("rest");
@@ -87,6 +87,7 @@ export function PhotoDeck() {
         setPhotos(unique);
         setHasMore(data.photos.length === DECK_PAGE);
         setLast(null);
+        setError("");
         setStatus("ready");
       })
       .catch((caught) => {
@@ -113,9 +114,10 @@ export function PhotoDeck() {
           return more.length > 0 ? [...currentPhotos, ...more] : currentPhotos;
         });
         if (data.photos.length < DECK_PAGE) setHasMore(false);
+        setError("");
       })
       .catch((caught) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || (caught instanceof Error && caught.name === "AbortError")) return;
         setError(caught instanceof ApiRequestError ? caught.message : "The next photos didn't load.");
         setHasMore(false);
       });
@@ -290,17 +292,19 @@ export function PhotoDeck() {
             <div className="relative h-[min(72dvh,40rem)] w-full">
               {behind ? (
                 <div
+                  key={behind.id}
                   className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.75rem] bg-[#e7e4de] shadow-sm"
                   aria-hidden="true"
                   style={{
                     transform: `scale(${0.94 + 0.06 * travel}) translateY(${12 - 12 * travel}px)`,
-                    transition: flight === "drag" ? "none" : "transform 420ms cubic-bezier(0.18, 0.9, 0.28, 1)",
+                    transition: flight === "drag" || flight === "left" || flight === "right" ? "none" : "transform 420ms cubic-bezier(0.18, 0.9, 0.28, 1)",
                   }}
                 >
                   <CardFace photo={behind} />
                 </div>
               ) : null}
               <div
+                key={current.id}
                 ref={cardRef}
                 className="absolute inset-0 z-10 touch-none select-none overflow-hidden rounded-[1.75rem] bg-[#274b3a] shadow-[0_18px_50px_rgb(39_75_58/0.22)]"
                 style={{ transform, transition }}

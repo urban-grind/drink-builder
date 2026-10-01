@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { jsonError, jsonOk } from "@/lib/api";
 import { listPhotoLeaderboard } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
@@ -6,6 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  await connection();
   try {
     return jsonOk({ photos: listPhotoLeaderboard() });
   } catch (error) {
