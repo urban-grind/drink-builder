@@ -50,11 +50,17 @@ export async function POST(request: Request) {
       uploadId,
       personName: valueOf(record, "personName"),
       email: valueOf(record, "email"),
+      phone: valueOf(record, "phone"),
       drinkName: valueOf(record, "drinkName"),
       caption: valueOf(record, "caption"),
     });
     if (!result.ok) {
-      const status = result.code === "EMAIL_IN_USE" ? 409 : result.code === "PHOTOS_UNAVAILABLE" ? 503 : 400;
+      const status =
+        result.code === "EMAIL_IN_USE" || result.code === "PHONE_IN_USE" || result.code === "CONTACT_IN_USE"
+          ? 409
+          : result.code === "PHOTOS_UNAVAILABLE"
+            ? 503
+            : 400;
       return jsonError(status, result.code, result.message, result.fields);
     }
     return jsonOk({ id: result.id, code: result.code, status: result.status }, 201);

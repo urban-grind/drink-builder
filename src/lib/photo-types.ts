@@ -1,6 +1,6 @@
 export type PhotoStatus = "pending" | "approved" | "rejected" | "removed";
 
-/** Public photo. Email is stored and is never part of this shape. */
+/** Public photo. Email and phone are stored and are never part of this shape. */
 export type PublicPhoto = {
   id: string;
   personName: string;
@@ -15,7 +15,8 @@ export type PublicPhoto = {
 };
 
 export type ReviewPhoto = PublicPhoto & {
-  email: string;
+  email: string | null;
+  phone: string | null;
   status: PhotoStatus;
 };
 
@@ -32,7 +33,8 @@ export type LeaderboardEntry = {
 
 export type PhotoEntryInput = {
   personName: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   drinkName: string;
   caption: string;
 };

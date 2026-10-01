@@ -18,6 +18,19 @@ export const PHOTO_CONTENT_TYPES = [
 const EMAIL_PATTERN =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
+/** Digits only, with a leading country code 1 removed from an 11-digit number. */
+export function normalizePhone(input: string): string | null {
+  const digits = input.replace(/\D/g, "");
+  const local = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (local.length !== 10) return null;
+  return local;
+}
+
+export function formatStoredPhone(digits: string): string {
+  if (digits.length !== 10) return digits;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 const EXTENSION_TYPES: Record<string, (typeof PHOTO_CONTENT_TYPES)[number]> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -66,9 +79,54 @@ export function parsePhotoUploadRequest(
   return { ok: true, contentType, contentLength };
 }
 
+export const EMAIL_ALREADY_ENTERED = "You already entered with that email. Try again.";
+export const PHONE_ALREADY_ENTERED = "You already entered with that number. Try again.";
+
 export type PhotoValidationResult =
   | { ok: true; value: PhotoEntryInput }
   | { ok: false; message: string; fields: FieldErrors };
+
+/** Email is stored in lowercase. Phone is 10 digits, so spacing and a leading 1 do not matter. */
+export function parsePhotoContact(input: unknown): {
+  email: string | null;
+  phone: string | null;
+  fields: FieldErrors;
+} {
+  if (!isRecord(input)) {
+    return {
+      email: null,
+      phone: null,
+      fields: {
+        email: "Add an email or a phone number.",
+        phone: "Add an email or a phone number.",
+      },
+    };
+  }
+
+  const fields: FieldErrors = {};
+  const rawEmail = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const rawPhone = typeof input.phone === "string" ? input.phone.trim() : "";
+  let email: string | null = null;
+  let phone: string | null = null;
+  if (!rawEmail && !rawPhone) {
+    fields.email = "Add an email or a phone number.";
+    fields.phone = "Add an email or a phone number.";
+  } else {
+    if (rawEmail) {
+      if (rawEmail.length > PHOTO_EMAIL_MAX || !EMAIL_PATTERN.test(rawEmail)) {
+        fields.email = "Enter an email address like name@example.com.";
+      } else {
+        email = rawEmail;
+      }
+    }
+    if (rawPhone) {
+      const normalized = normalizePhone(rawPhone);
+      if (!normalized) fields.phone = "Enter a phone number like 705-555-0199.";
+      else phone = normalized;
+    }
+  }
+  return { email, phone, fields };
+}
 
 export function validatePhotoEntry(input: unknown): PhotoValidationResult {
   if (!isRecord(input)) {
@@ -85,11 +143,10 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
     fields.personName = "Please use different wording for your name.";
   }
 
-  const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : null;
-  if (!email) fields.email = "Add your email.";
-  else if (email.length > PHOTO_EMAIL_MAX || !EMAIL_PATTERN.test(email)) {
-    fields.email = "Enter an email address like name@example.com.";
-  }
+  const contact = parsePhotoContact(input);
+  Object.assign(fields, contact.fields);
+  const email = contact.email;
+  const phone = contact.phone;
 
   const drinkName = typeof input.drinkName === "string" ? cleanText(input.drinkName) : null;
   if (!drinkName) fields.drinkName = "Name the drink.";
@@ -112,7 +169,7 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
     fields.caption = "Please use different wording in the caption.";
   }
 
-  if (Object.keys(fields).length > 0 || !personName || !email || !drinkName || caption === null) {
+  if (Object.keys(fields).length > 0 || !personName || !drinkName || caption === null || (!email && !phone)) {
     const messages = [...new Set(Object.values(fields))];
     return {
       ok: false,
@@ -121,5 +178,5 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
     };
   }
 
-  return { ok: true, value: { personName, email, drinkName, caption } };
+  return { ok: true, value: { personName, email, phone, drinkName, caption } };
 }

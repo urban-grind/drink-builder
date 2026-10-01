@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, describe, it } from "node:test";
 import sharp from "sharp";
 import piexif from "piexifjs";
 import { resetDbForTests, getDb } from "@/lib/db";
 import { decodeHeicWithWasm, makeBoardImages, VOTE_LONG_EDGE, THUMB_LONG_EDGE } from "@/lib/photo-image";
+import { POST as checkPhotoContactRoute } from "@/app/api/photos/contact/route";
 import { DELETE } from "@/app/api/photos/[id]/vote/route";
 import {
   castPhotoVote,
@@ -17,6 +19,7 @@ import {
   listPhotoDeck,
   listPhotoLeaderboard,
   listReviewPhotos,
+  checkPhotoContact,
   moderatePhoto,
   submitPhoto,
   swipeDeckPhoto,
@@ -203,6 +206,65 @@ describe("photo contest", { concurrency: false }, () => {
       caption: "",
     });
     assert.equal(rude.ok, false);
+    const neither = validatePhotoEntry({
+      personName: "Nia",
+      email: "  ",
+      phone: "",
+      drinkName: "Latte",
+      caption: "",
+    });
+    assert.equal(neither.ok, false);
+    if (!neither.ok) assert.match(neither.message, /email or a phone/i);
+
+    const fromPunctuation = validatePhotoEntry({
+      personName: "Nia",
+      phone: "(705) 555-0199",
+      drinkName: "Latte",
+      caption: "",
+    });
+    const fromDigits = validatePhotoEntry({
+      personName: "Nia",
+      phone: "7055550199",
+      drinkName: "Latte",
+      caption: "",
+    });
+    assert.equal(fromPunctuation.ok, true);
+    assert.equal(fromDigits.ok, true);
+    if (fromPunctuation.ok && fromDigits.ok) {
+      assert.equal(fromPunctuation.value.phone, "7055550199");
+      assert.equal(fromDigits.value.phone, fromPunctuation.value.phone);
+      assert.equal(fromPunctuation.value.email, null);
+    }
+
+    const country = validatePhotoEntry({
+      personName: "Nia",
+      phone: "+1 (705) 555-0199",
+      drinkName: "Latte",
+      caption: "",
+    });
+    assert.equal(country.ok, true);
+    if (country.ok) assert.equal(country.value.phone, "7055550199");
+
+    const shortPhone = validatePhotoEntry({
+      personName: "Nia",
+      phone: "555-0199",
+      drinkName: "Latte",
+      caption: "",
+    });
+    assert.equal(shortPhone.ok, false);
+
+    const mixedEmail = validatePhotoEntry({
+      personName: "Nia",
+      email: "Case@Example.com",
+      drinkName: "Latte",
+      caption: "",
+    });
+    assert.equal(mixedEmail.ok, true);
+    if (mixedEmail.ok) {
+      assert.equal(mixedEmail.value.email, "case@example.com");
+      assert.equal(mixedEmail.value.phone, null);
+    }
+
     const heic = parsePhotoUploadRequest({
       contentType: "",
       contentLength: 1000,
@@ -630,6 +692,199 @@ describe("photo contest", { concurrency: false }, () => {
     } finally {
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("keeps one photo per email and one photo per phone", async () => {
+    const source = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 80, b: 40 } },
+    })
+      .jpeg()
+      .toBuffer();
+
+    async function enter(contact: { email?: string; phone?: string; drinkName: string }) {
+      const upload = await createUpload({ contentType: "image/jpeg", contentLength: source.length });
+      assert.equal(upload.ok, true);
+      if (!upload.ok) throw new Error("upload failed");
+      storage.objects.set(uploadKey(upload.uploadId), { body: source, contentType: "image/jpeg" });
+      return submitPhoto({
+        uploadId: upload.uploadId,
+        personName: "Nia",
+        email: contact.email ?? "",
+        phone: contact.phone ?? "",
+        drinkName: contact.drinkName,
+        caption: "",
+      });
+    }
+
+    const missing = await submitPhoto({
+      uploadId: crypto.randomUUID(),
+      personName: "Nia",
+      email: "",
+      phone: "",
+      drinkName: "Latte",
+      caption: "",
+    });
+    assert.equal(missing.ok, false);
+    if (!missing.ok) assert.equal(missing.code, "VALIDATION");
+
+    const phoneOnly = await enter({ phone: "(705) 555-0199", drinkName: "Phone cup" });
+    assert.equal(phoneOnly.ok, true);
+    if (!phoneOnly.ok) return;
+
+    const presignsBeforeCheck = storage.presigns.length;
+    const uploadsBeforeCheck = getDb().prepare("SELECT COUNT(*) AS count FROM photo_uploads").get() as {
+      count: number;
+    };
+    const takenPhone = await checkPhotoContactRoute(
+      new Request("http://localhost/api/photos/contact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ phone: "(705) 555-0199" }),
+      }),
+    );
+    assert.equal(takenPhone.status, 409);
+    const takenPhoneBody = (await takenPhone.json()) as {
+      error: { message: string; fields: { phone?: string } };
+    };
+    assert.equal(takenPhoneBody.error.message, "You already entered with that number. Try again.");
+    assert.equal(takenPhoneBody.error.fields.phone, "You already entered with that number. Try again.");
+    const takenDigits = checkPhotoContact({ phone: "7055550199" });
+    assert.equal(takenDigits.ok, false);
+    if (!takenDigits.ok) assert.equal(takenDigits.message, "You already entered with that number. Try again.");
+    const openPhone = checkPhotoContact({ phone: "416-555-0148" });
+    assert.equal(openPhone.ok, true);
+    assert.equal(storage.presigns.length, presignsBeforeCheck);
+    const uploadsAfterCheck = getDb().prepare("SELECT COUNT(*) AS count FROM photo_uploads").get() as {
+      count: number;
+    };
+    assert.equal(Number(uploadsAfterCheck.count), Number(uploadsBeforeCheck.count));
+    const phoneReview = listReviewPhotos().find((photo) => photo.id === phoneOnly.id);
+    assert.equal(phoneReview?.phone, "7055550199");
+    assert.equal(phoneReview?.email, null);
+    assert.equal(moderatePhoto(phoneOnly.id, "approve").ok, true);
+    const phonePublic = JSON.stringify(getPublicPhoto(phoneOnly.id, null) ?? {});
+    assert.equal(phonePublic.includes("7055550199"), false);
+    assert.equal(phonePublic.includes("phone"), false);
+
+    const samePhone = await enter({ phone: "7055550199", drinkName: "Second phone" });
+    assert.equal(samePhone.ok, false);
+    if (!samePhone.ok) assert.equal(samePhone.code, "PHONE_IN_USE");
+
+    const otherPhone = await enter({ phone: "416-555-0148", drinkName: "Other phone" });
+    assert.equal(otherPhone.ok, true);
+
+    const emailOnly = await enter({ email: "Case@Example.com", drinkName: "Email cup" });
+    assert.equal(emailOnly.ok, true);
+    if (!emailOnly.ok) return;
+    const emailReview = listReviewPhotos().find((photo) => photo.id === emailOnly.id);
+    assert.equal(emailReview?.email, "case@example.com");
+    assert.equal(emailReview?.phone, null);
+    assert.equal(JSON.stringify(listReviewPhotos()).includes("Case@Example.com"), false);
+
+    const presignsBeforeEmail = storage.presigns.length;
+    const takenEmail = await checkPhotoContactRoute(
+      new Request("http://localhost/api/photos/contact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "CASE@example.com" }),
+      }),
+    );
+    assert.equal(takenEmail.status, 409);
+    const takenEmailBody = (await takenEmail.json()) as { error: { message: string; fields: { email?: string } } };
+    assert.equal(takenEmailBody.error.message, "You already entered with that email. Try again.");
+    assert.equal(takenEmailBody.error.fields.email, "You already entered with that email. Try again.");
+    const openEmail = checkPhotoContact({ email: "other.person@example.com" });
+    assert.equal(openEmail.ok, true);
+    assert.equal(storage.presigns.length, presignsBeforeEmail);
+
+    const sameEmail = await enter({ email: "CASE@example.com", drinkName: "Second email" });
+    assert.equal(sameEmail.ok, false);
+    if (!sameEmail.ok) {
+      assert.equal(sameEmail.code, "EMAIL_IN_USE");
+      assert.equal(sameEmail.message, "You already entered with that email. Try again.");
+    }
+
+    const otherEmail = await enter({ email: "other.person@example.com", drinkName: "Other email" });
+    assert.equal(otherEmail.ok, true);
+  });
+
+  it("migrates an email-only table so phone numbers can be stored", () => {
+    const previous = process.env.DRINK_DB_PATH;
+    const file = path.join(os.tmpdir(), `urban-grind-photo-migrate-${process.pid}.sqlite`);
+    fs.rmSync(file, { force: true });
+    process.env.DRINK_DB_PATH = file;
+    resetDbForTests();
+    const photoId = "22222222-2222-4222-8222-222222222201";
+    const voterId = "33333333-3333-4333-8333-333333333301";
+    try {
+      const raw = new DatabaseSync(file);
+      raw.exec(`
+        CREATE TABLE photo_entries (
+          id TEXT PRIMARY KEY,
+          person_name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          drink_name TEXT NOT NULL,
+          caption TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL,
+          original_key TEXT NOT NULL,
+          content_type TEXT NOT NULL,
+          vote_key TEXT NOT NULL,
+          thumb_key TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          reviewed_at TEXT
+        );
+        CREATE TABLE photo_votes (
+          photo_id TEXT NOT NULL,
+          voter_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (photo_id, voter_id),
+          FOREIGN KEY (photo_id) REFERENCES photo_entries(id)
+        );
+      `);
+      raw
+        .prepare(
+          `INSERT INTO photo_entries (
+            id, person_name, email, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at
+          ) VALUES (?, 'Nia', 'Mixed@Example.com', 'Old cup', '', 'approved', 'original/old', 'image/jpeg', 'vote/old', 'thumb/old', ?, NULL)`,
+        )
+        .run(photoId, "2026-09-01T12:00:00.000Z");
+      raw
+        .prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at) VALUES (?, ?, ?)")
+        .run(photoId, voterId, "2026-09-01T12:00:00.000Z");
+      (raw as { close?: () => void }).close?.();
+
+      const db = getDb();
+      const row = db.prepare("SELECT email, phone FROM photo_entries WHERE id = ?").get(photoId) as {
+        email: string | null;
+        phone: string | null;
+      };
+      assert.equal(row.email, "mixed@example.com");
+      assert.equal(row.phone, null);
+      const votes = db.prepare("SELECT COUNT(*) AS count FROM photo_votes WHERE photo_id = ?").get(photoId) as {
+        count: number;
+      };
+      assert.equal(Number(votes.count), 1);
+
+      const second = "22222222-2222-4222-8222-222222222202";
+      db.prepare(
+        `INSERT INTO photo_entries (
+          id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at
+        ) VALUES (?, 'Bea', NULL, '7055550199', 'New cup', '', 'pending', 'original/new', 'image/jpeg', 'vote/new', 'thumb/new', ?)`,
+      ).run(second, "2026-09-02T12:00:00.000Z");
+      assert.throws(() => {
+        db.prepare(
+          `INSERT INTO photo_entries (
+            id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at
+          ) VALUES (?, 'Cam', NULL, '7055550199', 'Copy', '', 'pending', 'original/copy', 'image/jpeg', 'vote/copy', 'thumb/copy', ?)`,
+        ).run("22222222-2222-4222-8222-222222222203", "2026-09-03T12:00:00.000Z");
+      });
+    } finally {
+      resetDbForTests();
+      fs.rmSync(file, { force: true });
+      if (previous === undefined) delete process.env.DRINK_DB_PATH;
+      else process.env.DRINK_DB_PATH = previous;
+      resetDbForTests();
     }
   });
 });

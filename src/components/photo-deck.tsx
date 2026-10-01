@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { PhotoLeaderboard } from "@/components/photo-leaderboard";
+import { setLeaderboardOpen, useLeaderboardOpen, useMyPhotoIds } from "@/components/use-contest-memory";
 import { useVoter } from "@/components/use-voter";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
@@ -62,8 +63,10 @@ export function PhotoDeck() {
   const [flight, setFlight] = useState<Flight>("rest");
   const [busy, setBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [screen, setScreen] = useState<"deck" | "board">("deck");
+  const [boardRevision, setBoardRevision] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const boardOpen = useLeaderboardOpen();
+  const myPhotoIds = useMyPhotoIds();
   const photosRef = useRef<PublicPhoto[]>([]);
   const startX = useRef<number | null>(null);
   const dragXRef = useRef(0);
@@ -165,6 +168,7 @@ export function PhotoDeck() {
       setDrag(0);
       setPhotos((items) => items.filter((item) => item.id !== photo.id));
       setLast({ photo, action });
+      setBoardRevision((value) => value + 1);
     } catch (caught) {
       setFlight("back");
       setDrag(0);
@@ -189,6 +193,7 @@ export function PhotoDeck() {
         setFlight(data.action === "vote" ? "undo-right" : "undo-left");
         setPhotos((items) => [data.photo, ...items.filter((item) => item.id !== data.photo.id)]);
         setLast(null);
+        setBoardRevision((value) => value + 1);
       });
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => setFlight("rest"));
@@ -251,26 +256,14 @@ export function PhotoDeck() {
   return (
     <div className="relative left-1/2 flex w-screen max-w-[100vw] -translate-x-1/2 -mt-8 -mb-8 min-h-[calc(100dvh-4.5rem)] flex-col bg-[#f3f2ef] px-4 py-4 sm:-mt-12 sm:-mb-12 sm:px-6">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        {screen === "board" ? <PhotoLeaderboard onBack={() => setScreen("deck")} /> : null}
-
-        {screen === "deck" ? (
-          <button
-            type="button"
-            onClick={() => setScreen("board")}
-            className="!mb-3 !h-11 !w-full !rounded-full !border !border-[#274b3a] !bg-white !text-sm !font-bold !text-[#274b3a]"
-          >
-            Leaderboard
-          </button>
-        ) : null}
-
-        {screen === "deck" && status === "loading" ? (
+        {status === "loading" ? (
           <div role="status" className="flex flex-1 items-center justify-center">
             <p className="sr-only">Loading photos</p>
             <div className="aspect-[3/4] w-full animate-pulse rounded-[1.75rem] bg-[#e7e4de]" />
           </div>
         ) : null}
 
-        {screen === "deck" && status === "error" ? (
+        {status === "error" ? (
           <div role="alert" className="m-auto max-w-sm text-center">
             <h1 className="font-heading text-4xl">The photos didn't load</h1>
             <p className="mt-3">{error}</p>
@@ -280,14 +273,14 @@ export function PhotoDeck() {
           </div>
         ) : null}
 
-        {screen === "deck" && status === "ready" && !current ? (
+        {status === "ready" && !current ? (
           <div className="m-auto max-w-sm text-center">
             <h1 className="font-heading text-4xl leading-tight text-balance">You're caught up</h1>
             <p className="mt-3 text-lg">Check back later for more.</p>
           </div>
         ) : null}
 
-        {screen === "deck" && status === "ready" && current ? (
+        {status === "ready" && current ? (
           <div className="relative mx-auto flex w-full flex-1 items-center">
             <div className="relative h-[min(72dvh,40rem)] w-full">
               {behind ? (
@@ -335,14 +328,13 @@ export function PhotoDeck() {
           </div>
         ) : null}
 
-        {screen === "deck" && error && status === "ready" ? (
+        {error && status === "ready" ? (
           <p role="alert" className="mt-3 text-center text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
-        {screen === "deck" ? (
-          <div className="mx-auto mt-4 flex w-full max-w-md items-center justify-between gap-3 pb-2">
+        <div className="mx-auto mt-4 flex w-full max-w-md items-center justify-between gap-3 pb-2">
           <button
             type="button"
             onClick={() => void finish("skip")}
@@ -367,8 +359,23 @@ export function PhotoDeck() {
           >
             Vote
           </button>
-          </div>
-        ) : null}
+        </div>
+        <section className="pb-6">
+          <button
+            type="button"
+            aria-expanded={boardOpen}
+            aria-controls="photo-leaderboard-panel"
+            onClick={() => setLeaderboardOpen(!boardOpen)}
+            className="!h-11 !w-full !rounded-full !border !border-[#274b3a] !bg-white !text-sm !font-bold !text-[#274b3a]"
+          >
+            {boardOpen ? "Hide leaderboard" : "Leaderboard"}
+          </button>
+          {boardOpen ? (
+            <div id="photo-leaderboard-panel">
+              <PhotoLeaderboard mine={myPhotoIds} revision={boardRevision} />
+            </div>
+          ) : null}
+        </section>
       </div>
     </div>
   );

@@ -118,7 +118,8 @@ function ensurePhotoTables(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS photo_entries (
       id TEXT PRIMARY KEY,
       person_name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
+      email TEXT,
+      phone TEXT,
       drink_name TEXT NOT NULL,
       caption TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL,
@@ -127,7 +128,8 @@ function ensurePhotoTables(db: DatabaseSync): void {
       vote_key TEXT NOT NULL,
       thumb_key TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      reviewed_at TEXT
+      reviewed_at TEXT,
+      public_code TEXT
     );
     CREATE TABLE IF NOT EXISTS photo_votes (
       photo_id TEXT NOT NULL,
@@ -149,13 +151,102 @@ function ensurePhotoTables(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_photo_swipes_voter ON photo_swipes (voter_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_photo_swipes_photo ON photo_swipes (photo_id, action);
   `);
-  const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as { name: string }[];
+  const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as {
+    name: string;
+    notnull: number;
+  }[];
   if (!columns.some((column) => column.name === "public_code")) {
     db.exec("ALTER TABLE photo_entries ADD COLUMN public_code TEXT");
   }
-  db.exec(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_public_code ON photo_entries (public_code)",
-  );
+  ensurePhotoContacts(db);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_photo_entries_status ON photo_entries (status, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_public_code ON photo_entries (public_code);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_email
+      ON photo_entries (lower(email)) WHERE email IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_phone
+      ON photo_entries (phone) WHERE phone IS NOT NULL;
+  `);
+}
+
+/**
+ * Older tables required a unique email and had no phone column.
+ * Email and phone are both optional, and each one that is present stays unique.
+ */
+function ensurePhotoContacts(db: DatabaseSync): void {
+  const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as {
+    name: string;
+    notnull: number;
+  }[];
+  const email = columns.find((column) => column.name === "email");
+  const hasPhone = columns.some((column) => column.name === "phone");
+  if (email && email.notnull === 0 && hasPhone) return;
+
+  const hasCode = columns.some((column) => column.name === "public_code");
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    db.exec("DROP TABLE IF EXISTS photo_entries_migrated");
+    db.exec(`
+      CREATE TABLE photo_entries_migrated (
+        id TEXT PRIMARY KEY,
+        person_name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        drink_name TEXT NOT NULL,
+        caption TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        original_key TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        vote_key TEXT NOT NULL,
+        thumb_key TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        reviewed_at TEXT,
+        public_code TEXT
+      );
+    `);
+    if (hasCode) {
+      db.exec(`
+        INSERT INTO photo_entries_migrated (
+          id, person_name, email, phone, drink_name, caption, status,
+          original_key, content_type, vote_key, thumb_key, created_at, reviewed_at, public_code
+        )
+        SELECT
+          id, person_name,
+          CASE WHEN email IS NULL OR trim(email) = '' THEN NULL ELSE lower(trim(email)) END,
+          NULL,
+          drink_name, caption, status, original_key, content_type, vote_key, thumb_key,
+          created_at, reviewed_at, public_code
+        FROM photo_entries;
+      `);
+    } else {
+      db.exec(`
+        INSERT INTO photo_entries_migrated (
+          id, person_name, email, phone, drink_name, caption, status,
+          original_key, content_type, vote_key, thumb_key, created_at, reviewed_at
+        )
+        SELECT
+          id, person_name,
+          CASE WHEN email IS NULL OR trim(email) = '' THEN NULL ELSE lower(trim(email)) END,
+          NULL,
+          drink_name, caption, status, original_key, content_type, vote_key, thumb_key,
+          created_at, reviewed_at
+        FROM photo_entries;
+      `);
+    }
+    db.exec("DROP TABLE photo_entries");
+    db.exec("ALTER TABLE photo_entries_migrated RENAME TO photo_entries");
+    db.exec("COMMIT");
+  } catch (error) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // The migration transaction did not stay open.
+    }
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
 }
 
 export function getDb(): DatabaseSync {

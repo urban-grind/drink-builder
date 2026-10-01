@@ -8,7 +8,7 @@ const steps = [
   {
     number: "02",
     title: "Put it up",
-    body: "Your name and the drink. One photo per email.",
+    body: "Your name and the drink. One photo per email or phone.",
     active: false,
   },
   {

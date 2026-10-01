@@ -10,11 +10,12 @@ function likeLabel(percent: number | null): string {
   return `${percent}% liked`;
 }
 
-export function PhotoLeaderboard({ onBack }: { onBack: () => void }) {
+export function PhotoLeaderboard({ mine, revision }: { mine: string[]; revision: number }) {
   const [photos, setPhotos] = useState<LeaderboardEntry[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("The leaderboard didn't load.");
+  const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const mineIds = new Set(mine);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -23,6 +24,7 @@ export function PhotoLeaderboard({ onBack }: { onBack: () => void }) {
     })
       .then((data) => {
         setPhotos(data.photos);
+        setError("");
         setStatus("ready");
       })
       .catch((caught) => {
@@ -31,24 +33,17 @@ export function PhotoLeaderboard({ onBack }: { onBack: () => void }) {
         setError(caught instanceof ApiRequestError ? caught.message : "The leaderboard didn't load.");
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, revision]);
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="!h-11 !rounded-full !border !border-[#274b3a] !bg-white !px-4 !text-sm !font-bold !text-[#274b3a]"
-        >
-          Back to swiping
-        </button>
-      </div>
-      <h1 className="mt-5 font-heading text-3xl leading-none">Leaderboard</h1>
+    <div className="pt-4">
+      <h2 id="photo-leaderboard-heading" className="font-heading text-3xl leading-none">
+        Leaderboard
+      </h2>
       <p className="mt-2 text-sm">Ranked by votes. A tie goes to the higher like percentage.</p>
 
       {status === "loading" ? (
-        <div role="status" className="mt-6 space-y-3">
+        <div role="status" className="mt-4 space-y-3">
           <p className="sr-only">Loading the leaderboard</p>
           <div className="h-20 animate-pulse rounded-2xl bg-[#e7e4de]" />
           <div className="h-20 animate-pulse rounded-2xl bg-[#e7e4de]" />
@@ -57,40 +52,40 @@ export function PhotoLeaderboard({ onBack }: { onBack: () => void }) {
       ) : null}
 
       {status === "error" ? (
-        <div role="alert" className="m-auto max-w-sm py-10 text-center">
+        <div role="alert" className="py-6 text-center">
           <p>{error}</p>
-          <Button type="button" className="mt-6 h-12 rounded-full px-6" onClick={() => setReloadKey((value) => value + 1)}>
+          <Button type="button" className="mt-4 h-12 rounded-full px-6" onClick={() => setReloadKey((value) => value + 1)}>
             Try again
           </Button>
         </div>
       ) : null}
 
       {status === "ready" && photos.length === 0 ? (
-        <p className="m-auto max-w-sm py-10 text-center text-lg">No photos on the board yet.</p>
+        <p className="py-6 text-center text-lg">No photos on the board yet.</p>
       ) : null}
 
       {status === "ready" && photos.length > 0 ? (
-        <ol className="mt-5 flex flex-col gap-3 pb-4">
-          {photos.map((photo, index) => (
-            <li key={photo.id} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm">
-              <span className="w-6 shrink-0 text-center text-sm font-bold">{index + 1}</span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photo.thumbUrl}
-                alt=""
-                className="h-16 w-16 shrink-0 rounded-xl object-cover"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-base font-bold">{photo.personName.trim()}</p>
-                <p className="truncate text-sm text-[#274b3a]/70">{photo.drinkName}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="font-heading text-2xl leading-none">{photo.voteCount}</p>
-                <p className="text-xs font-bold">{photo.voteCount === 1 ? "vote" : "votes"}</p>
-                <p className="mt-1 text-sm font-bold">{likeLabel(photo.likePercent)}</p>
-              </div>
-            </li>
-          ))}
+        <ol className="mt-4 flex flex-col gap-3">
+          {photos.map((photo, index) => {
+            const yours = mineIds.has(photo.id);
+            return (
+              <li key={photo.id} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm">
+                <span className="w-6 shrink-0 text-center text-sm font-bold">{index + 1}</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.thumbUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-bold">{photo.personName.trim()}</p>
+                  {yours ? <p className="text-xs font-bold tracking-wide text-[#274b3a]">Your photo</p> : null}
+                  <p className="truncate text-sm text-[#274b3a]/70">{photo.drinkName}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-heading text-2xl leading-none">{photo.voteCount}</p>
+                  <p className="text-xs font-bold">{photo.voteCount === 1 ? "vote" : "votes"}</p>
+                  <p className="mt-1 text-sm font-bold">{likeLabel(photo.likePercent)}</p>
+                </div>
+              </li>
+            );
+          })}
         </ol>
       ) : null}
     </div>

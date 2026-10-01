@@ -6,7 +6,12 @@ import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
 import type { LeaderboardEntry, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
-import { validatePhotoEntry } from "@/lib/photo-validation";
+import {
+  EMAIL_ALREADY_ENTERED,
+  PHONE_ALREADY_ENTERED,
+  parsePhotoContact,
+  validatePhotoEntry,
+} from "@/lib/photo-validation";
 import type { FieldErrors } from "@/lib/types";
 
 const UPLOAD_TTL_MS = 30 * 60 * 1000;
@@ -34,7 +39,8 @@ type UploadRow = {
 type EntryRow = {
   id: string;
   person_name: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   drink_name: string;
   caption: string;
   status: PhotoStatus;
@@ -75,7 +81,7 @@ function toPublic(row: EntryRow): PublicPhoto {
 }
 
 function toReview(row: EntryRow): ReviewPhoto {
-  return { ...toPublic(row), email: row.email, status: row.status };
+  return { ...toPublic(row), email: row.email, phone: row.phone, status: row.status };
 }
 
 const selectEntry = `
@@ -83,6 +89,7 @@ const selectEntry = `
     e.id,
     e.person_name,
     e.email,
+    e.phone,
     e.drink_name,
     e.caption,
     e.status,
@@ -421,10 +428,61 @@ function markConsumed(uploadId: string): void {
     .run(new Date().toISOString(), uploadId);
 }
 
+function contactInUse(fields: FieldErrors): {
+  ok: false;
+  code: string;
+  message: string;
+  fields: FieldErrors;
+} {
+  const email = Boolean(fields.email);
+  const phone = Boolean(fields.phone);
+  const code = email && phone ? "CONTACT_IN_USE" : email ? "EMAIL_IN_USE" : "PHONE_IN_USE";
+  const message = email ? EMAIL_ALREADY_ENTERED : PHONE_ALREADY_ENTERED;
+  return { ok: false, code, message, fields };
+}
+
+function takenContactFields(
+  db: ReturnType<typeof getDb>,
+  email: string | null,
+  phone: string | null,
+): FieldErrors {
+  const fields: FieldErrors = {};
+  if (email) {
+    const taken = db.prepare("SELECT 1 AS found FROM photo_entries WHERE lower(email) = ?").get(email);
+    if (taken) fields.email = EMAIL_ALREADY_ENTERED;
+  }
+  if (phone) {
+    const taken = db.prepare("SELECT 1 AS found FROM photo_entries WHERE phone = ?").get(phone);
+    if (taken) fields.phone = PHONE_ALREADY_ENTERED;
+  }
+  return fields;
+}
+
+/** Looks up the email and phone before any photo bytes are accepted. */
+export function checkPhotoContact(input: {
+  email?: unknown;
+  phone?: unknown;
+}): { ok: true } | { ok: false; code: string; message: string; fields: FieldErrors } {
+  const contact = parsePhotoContact(input);
+  if (Object.keys(contact.fields).length > 0 || (!contact.email && !contact.phone)) {
+    const messages = [...new Set(Object.values(contact.fields))];
+    return {
+      ok: false,
+      code: "VALIDATION",
+      message: messages.length === 1 ? messages[0] : "Check the fields below and try again.",
+      fields: contact.fields,
+    };
+  }
+  const taken = takenContactFields(getDb(), contact.email, contact.phone);
+  if (taken.email || taken.phone) return contactInUse(taken);
+  return { ok: true };
+}
+
 export async function submitPhoto(input: {
   uploadId: string;
   personName: unknown;
   email: unknown;
+  phone?: unknown;
   drinkName: unknown;
   caption: unknown;
 }): Promise<
@@ -511,19 +569,14 @@ export async function submitPhoto(input: {
 
   const db = beginImmediate();
   try {
-    const emailTaken = db.prepare("SELECT 1 AS found FROM photo_entries WHERE email = ?").get(parsed.value.email);
-    if (emailTaken) {
+    const taken = takenContactFields(db, parsed.value.email, parsed.value.phone);
+    if (taken.email || taken.phone) {
       db.exec("ROLLBACK");
       await deleteQuietly(storage, voteKey);
       await deleteQuietly(storage, thumbKey);
       await deleteQuietly(storage, upload.object_key);
       markConsumed(upload.id);
-      return {
-        ok: false,
-        code: "EMAIL_IN_USE",
-        message: "That email already has a photo in.",
-        fields: { email: "That email already has a photo in." },
-      };
+      return contactInUse(taken);
     }
 
     const now = new Date().toISOString();
@@ -531,12 +584,13 @@ export async function submitPhoto(input: {
     const publicCode = takePhotoCode();
     db.prepare(
       `INSERT INTO photo_entries (
-        id, person_name, email, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at, public_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at, public_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       photoId,
       parsed.value.personName,
       parsed.value.email,
+      parsed.value.phone,
       parsed.value.drinkName,
       parsed.value.caption,
       status,
@@ -557,12 +611,15 @@ export async function submitPhoto(input: {
     if (isUniqueConstraint(error)) {
       await deleteQuietly(storage, upload.object_key);
       markConsumed(upload.id);
-      return {
-        ok: false,
-        code: "EMAIL_IN_USE",
-        message: "That email already has a photo in.",
-        fields: { email: "That email already has a photo in." },
-      };
+      const detail = error instanceof Error ? error.message.toLowerCase() : "";
+      const fields: FieldErrors = {};
+      if (detail.includes("phone")) fields.phone = PHONE_ALREADY_ENTERED;
+      if (detail.includes("email")) fields.email = EMAIL_ALREADY_ENTERED;
+      if (!fields.email && !fields.phone) {
+        if (parsed.value.email) fields.email = EMAIL_ALREADY_ENTERED;
+        if (parsed.value.phone) fields.phone = PHONE_ALREADY_ENTERED;
+      }
+      return contactInUse(fields);
     }
     throw error;
   }

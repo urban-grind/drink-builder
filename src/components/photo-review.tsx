@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { formatStoredPhone } from "@/lib/photo-validation";
 import type { PhotoStatus, ReviewPhoto } from "@/lib/photo-types";
 
 type ReviewPayload = {
@@ -179,10 +180,18 @@ export function PhotoReview() {
                   />
                   <h3 className="text-2xl">{photo.drinkName}</h3>
                   <p>{photo.personName}</p>
-                  <p className="text-sm">
-                    <span className="font-bold">Email </span>
-                    {photo.email}
-                  </p>
+                  {photo.email ? (
+                    <p className="text-sm">
+                      <span className="font-bold">Email </span>
+                      {photo.email}
+                    </p>
+                  ) : null}
+                  {photo.phone ? (
+                    <p className="text-sm">
+                      <span className="font-bold">Phone </span>
+                      {formatStoredPhone(photo.phone)}
+                    </p>
+                  ) : null}
                   {photo.caption ? <p className="text-pretty text-sm">{photo.caption}</p> : null}
                   <p className="text-sm">
                     {photo.voteCount} {photo.voteCount === 1 ? "vote" : "votes"}

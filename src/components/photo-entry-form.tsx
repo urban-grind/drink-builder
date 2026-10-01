@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { rememberMyPhoto } from "@/lib/local-votes";
 import {
   PHOTO_CAPTION_MAX,
   PHOTO_MAX_BYTES,
@@ -29,16 +30,18 @@ export function PhotoEntryForm({
   const router = useRouter();
   const baseId = useId();
   const captionHelpId = useId();
-  const emailHelpId = useId();
+  const contactHelpId = useId();
   const fieldIds: Record<string, string> = {
     photo: `${baseId}-file`,
     personName: `${baseId}-name`,
     email: `${baseId}-email`,
+    phone: `${baseId}-phone`,
     drinkName: `${baseId}-drink`,
     caption: `${baseId}-caption`,
   };
   const [personName, setPersonName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [drinkName, setDrinkName] = useState("");
   const [caption, setCaption] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -97,7 +100,7 @@ export function PhotoEntryForm({
       nextFields.photo = "Use a JPEG, PNG, WebP, or HEIC photo.";
     }
 
-    const parsed = validatePhotoEntry({ personName, email, drinkName, caption });
+    const parsed = validatePhotoEntry({ personName, email, phone, drinkName, caption });
     if (!parsed.ok) Object.assign(nextFields, parsed.fields);
     if (!file || Object.keys(nextFields).length > 0 || !parsed.ok) {
       setFields(nextFields);
@@ -107,15 +110,21 @@ export function PhotoEntryForm({
       return;
     }
 
-    if (uploadsEnabled === false) {
-      setFormError("Photo uploads aren't available right now.");
-      return;
-    }
-
     setPending(true);
     setFormError(null);
     setFields({});
     try {
+      await requestJson("/api/photos/contact", {
+        method: "POST",
+        body: JSON.stringify({ email, phone }),
+      });
+
+      if (uploadsEnabled === false) {
+        setFormError("Photo uploads aren't available right now.");
+        setPending(false);
+        return;
+      }
+
       let currentUpload = uploadId;
       const contentType = normalizePhotoType(file.type, file.name);
       if (!contentType) throw new ApiRequestError("VALIDATION", "Use a JPEG, PNG, WebP, or HEIC photo.");
@@ -145,11 +154,13 @@ export function PhotoEntryForm({
         body: JSON.stringify({
           uploadId: currentUpload,
           personName: parsed.value.personName,
-          email: parsed.value.email,
+          email: parsed.value.email ?? "",
+          phone: parsed.value.phone ?? "",
           drinkName: parsed.value.drinkName,
           caption: parsed.value.caption,
         }),
       });
+      rememberMyPhoto(saved.id);
       if (saved.status === "approved") {
         onFinished?.();
         router.push(photoEntryPath(saved.code || ""));
@@ -160,7 +171,12 @@ export function PhotoEntryForm({
     } catch (error) {
       if (error instanceof ApiRequestError) {
         const next = error.fields ?? {};
-        if (error.code === "EMAIL_IN_USE") next.email = error.message;
+        if (error.code === "EMAIL_IN_USE" && !next.email) next.email = error.message;
+        if (error.code === "PHONE_IN_USE" && !next.phone) next.phone = error.message;
+        if (error.code === "CONTACT_IN_USE") {
+          if (!next.email) next.email = error.message;
+          if (!next.phone) next.phone = error.message;
+        }
         if (error.code === "PHOTOS_UNAVAILABLE") setUploadsEnabled(false);
         setFields(next);
         setFormError(error.message);
@@ -178,7 +194,7 @@ export function PhotoEntryForm({
       <div className="ug-board rounded-2xl bg-white px-5 py-8 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
         <h1 className="text-4xl">Thanks</h1>
         <p className="mt-3 max-w-lg text-pretty">
-          We&apos;ll put {drink} up after a look. Your email stays private. This link is yours.
+          We&apos;ll put {drink} up after a look. Your contact stays private. This link is yours.
         </p>
         <div className="mt-6">
           <PhotoShare
@@ -270,16 +286,39 @@ export function PhotoEntryForm({
             maxLength={254}
             autoComplete="email"
             aria-invalid={Boolean(fields.email)}
-            aria-describedby={fields.email ? `${fieldIds.email}-error ${emailHelpId}` : emailHelpId}
+            aria-describedby={fields.email ? `${fieldIds.email}-error ${contactHelpId}` : contactHelpId}
             placeholder="name@email.com"
             className="h-11"
           />
-          <p id={emailHelpId} className="text-sm">
-            We keep this private. It doesn&apos;t show with your photo.
-          </p>
           {fields.email ? (
             <p id={`${fieldIds.email}-error`} role="alert" className="text-sm text-destructive">
               {fields.email}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor={fieldIds.phone}>Phone</Label>
+          <Input
+            id={fieldIds.phone}
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            maxLength={32}
+            autoComplete="tel"
+            aria-invalid={Boolean(fields.phone)}
+            aria-describedby={fields.phone ? `${fieldIds.phone}-error ${contactHelpId}` : contactHelpId}
+            placeholder="705-555-0199"
+            className="h-11"
+          />
+          <p id={contactHelpId} className="text-sm">
+            Add an email or a phone number. One is enough. We keep it private. It doesn&apos;t show with your photo.
+          </p>
+          {fields.phone ? (
+            <p id={`${fieldIds.phone}-error`} role="alert" className="text-sm text-destructive">
+              {fields.phone}
             </p>
           ) : null}
         </div>
