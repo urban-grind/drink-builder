@@ -1,12 +1,10 @@
-import type { Metadata } from "next";
-import { PhotoDetail } from "@/components/photo-detail";
-
-export const metadata: Metadata = {
-  title: "Photo",
-  description: "A drink photo from Urban Grind.",
-};
+import { redirect } from "next/navigation";
+import { photoCodeForId } from "@/lib/photos";
+import { photoEntryPath } from "@/lib/first-name";
 
 export default async function PhotoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <PhotoDetail key={id} id={id} />;
+  const code = photoCodeForId(id);
+  if (code) redirect(photoEntryPath(code));
+  redirect("/");
 }

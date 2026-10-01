@@ -141,7 +141,7 @@ describe("photo contest", { concurrency: false }, () => {
   it("shows a first name on an entry path", () => {
     assert.equal(firstName("Barrie Smith"), "Barrie");
     assert.equal(firstName("  Ada  "), "Ada");
-    assert.equal(photoEntryPath("11111111-1111-4111-8111-111111111111"), "/photos/11111111-1111-4111-8111-111111111111");
+    assert.equal(photoEntryPath("ab12cd"), "/p/ab12cd");
   });
 
   it("queues resizes so only two run at once", async () => {
@@ -422,6 +422,47 @@ describe("photo contest", { concurrency: false }, () => {
       assert.equal(getPublicPhoto(locked.id, null), null);
     } finally {
       delete process.env.PHOTO_SKIP_REVIEW;
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("shows five local sample photos only while developing", () => {
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+    try {
+      env.NODE_ENV = "development";
+      const first = listPhotoBoard(null);
+      const samples = first.popular.filter((photo) => photo.thumbUrl.startsWith("/photos/"));
+      assert.equal(samples.length, 5);
+      assert.equal(new Set(samples.map((photo) => photo.drinkName)).size, 5);
+      assert.equal(new Set(samples.map((photo) => photo.personName)).size, 5);
+      assert.equal(new Set(samples.map((photo) => photo.createdAt)).size, 5);
+      assert.equal(new Set(samples.map((photo) => photo.voteCount)).size, 5);
+      assert.equal(new Set(samples.map((photo) => photo.code)).size, 5);
+      assert.equal(samples.every((photo) => /^[a-z0-9]{6}$/.test(photo.code)), true);
+      assert.equal(JSON.stringify(first).includes("@"), false);
+      assert.equal(samples.every((photo) => !photo.thumbUrl.includes("r2")), true);
+
+      const again = listPhotoBoard(null).popular.filter((photo) => photo.thumbUrl.startsWith("/photos/"));
+      assert.equal(again.length, 5);
+      assert.deepEqual(
+        again.map((photo) => photo.code).sort(),
+        samples.map((photo) => photo.code).sort(),
+      );
+      const stored = getDb()
+        .prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE original_key LIKE 'local-sample/%'")
+        .get() as { count: number };
+      assert.equal(stored.count, 5);
+
+      env.NODE_ENV = "production";
+      const hidden = listPhotoBoard(null);
+      assert.equal(
+        hidden.popular.some((photo) => photo.thumbUrl.startsWith("/photos/")),
+        false,
+      );
+      assert.equal(getPublicPhoto("11111111-1111-4111-8111-111111111101", null), null);
+    } finally {
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
     }

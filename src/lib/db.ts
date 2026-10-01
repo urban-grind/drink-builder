@@ -139,6 +139,13 @@ function ensurePhotoTables(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_photo_votes_voter ON photo_votes (voter_id);
     CREATE INDEX IF NOT EXISTS idx_photo_entries_status ON photo_entries (status, created_at);
   `);
+  const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "public_code")) {
+    db.exec("ALTER TABLE photo_entries ADD COLUMN public_code TEXT");
+  }
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_public_code ON photo_entries (public_code)",
+  );
 }
 
 export function getDb(): DatabaseSync {

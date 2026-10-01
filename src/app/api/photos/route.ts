@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       const status = result.code === "EMAIL_IN_USE" ? 409 : result.code === "PHOTOS_UNAVAILABLE" ? 503 : 400;
       return jsonError(status, result.code, result.message, result.fields);
     }
-    return jsonOk({ id: result.id, status: result.status }, 201);
+    return jsonOk({ id: result.id, code: result.code, status: result.status }, 201);
   } catch (error) {
     console.error("Failed to save photo entry", safeErrorText(error));
     return jsonError(500, "SERVER", "The photo didn't go through. Try again.");

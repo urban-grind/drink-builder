@@ -4,6 +4,6 @@ export function firstName(personName: string): string {
   return first || personName.trim();
 }
 
-export function photoEntryPath(id: string): string {
-  return `/photos/${id}`;
+export function photoEntryPath(code: string): string {
+  return `/p/${code}`;
 }

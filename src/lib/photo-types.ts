@@ -9,6 +9,7 @@ export type PublicPhoto = {
   createdAt: string;
   voteCount: number;
   voted: boolean;
+  code: string;
   thumbUrl: string;
   imageUrl: string;
 };

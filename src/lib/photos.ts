@@ -1,6 +1,8 @@
 import { beginImmediate, getDb, isUniqueConstraint, rollbackQuietly } from "@/lib/db";
 import { contentTypeMatches, detectImageType, makeBoardImages } from "@/lib/photo-image";
 import { withResizeSlot } from "@/lib/resize-queue";
+import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
+import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib/sample-photos";
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
 import type { PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
@@ -42,6 +44,7 @@ type EntryRow = {
   thumb_key: string;
   created_at: string;
   reviewed_at: string | null;
+  public_code: string | null;
   vote_count: number;
   voted: number;
 };
@@ -55,6 +58,8 @@ function imageUrl(id: string): string {
 }
 
 function toPublic(row: EntryRow): PublicPhoto {
+  const localThumb = localSampleAsset(row.thumb_key);
+  const localVote = localSampleAsset(row.vote_key);
   return {
     id: row.id,
     personName: row.person_name,
@@ -63,8 +68,9 @@ function toPublic(row: EntryRow): PublicPhoto {
     createdAt: row.created_at,
     voteCount: Number(row.vote_count),
     voted: Number(row.voted) === 1,
-    thumbUrl: thumbUrl(row.id),
-    imageUrl: imageUrl(row.id),
+    code: row.public_code ?? "",
+    thumbUrl: localThumb ?? thumbUrl(row.id),
+    imageUrl: localVote ?? imageUrl(row.id),
   };
 }
 
@@ -86,6 +92,7 @@ const selectEntry = `
     e.thumb_key,
     e.created_at,
     e.reviewed_at,
+    e.public_code,
     (SELECT COUNT(*) FROM photo_votes v WHERE v.photo_id = e.id) AS vote_count,
     EXISTS(
       SELECT 1 FROM photo_votes v WHERE v.photo_id = e.id AND v.voter_id = ?
@@ -93,16 +100,26 @@ const selectEntry = `
   FROM photo_entries e
 `;
 
+/** Samples stay on the local preview. Any other environment skips those rows. */
+function sampleVisibilitySql(): string {
+  return "(? = 1 OR e.original_key NOT LIKE 'local-sample/%')";
+}
+
+function sampleVisibilityFlag(): number {
+  return samplePhotosEnabled() ? 1 : 0;
+}
+
 function queryPhotos(sort: "top" | "newest", voterId: string): PublicPhoto[] {
   const order =
     sort === "top" ? "ORDER BY vote_count DESC, e.created_at DESC" : "ORDER BY e.created_at DESC";
   const rows = getDb()
-    .prepare(`${selectEntry} WHERE e.status = 'approved' ${order}`)
-    .all(voterId) as EntryRow[];
+    .prepare(`${selectEntry} WHERE e.status = 'approved' AND ${sampleVisibilitySql()} ${order}`)
+    .all(voterId, sampleVisibilityFlag()) as EntryRow[];
   return rows.map(toPublic);
 }
 
 export function listPhotoBoard(voterId: string | null): { popular: PublicPhoto[]; newest: PublicPhoto[] } {
+  ensureSamplePhotos();
   const voter = voterId ?? "";
   return {
     popular: queryPhotos("top", voter),
@@ -111,16 +128,35 @@ export function listPhotoBoard(voterId: string | null): { popular: PublicPhoto[]
 }
 
 export function getPublicPhoto(id: string, voterId: string | null): PublicPhoto | null {
+  ensureSamplePhotos();
   const row = getDb()
-    .prepare(`${selectEntry} WHERE e.id = ? AND e.status = 'approved'`)
-    .get(voterId ?? "", id) as EntryRow | undefined;
+    .prepare(`${selectEntry} WHERE e.id = ? AND e.status = 'approved' AND ${sampleVisibilitySql()}`)
+    .get(voterId ?? "", id, sampleVisibilityFlag()) as EntryRow | undefined;
   return row ? toPublic(row) : null;
 }
 
+export function getPublicPhotoByCode(code: string, voterId: string | null): PublicPhoto | null {
+  if (!isPhotoCode(code)) return null;
+  ensureSamplePhotos();
+  const row = getDb()
+    .prepare(`${selectEntry} WHERE e.public_code = ? AND e.status = 'approved' AND ${sampleVisibilitySql()}`)
+    .get(voterId ?? "", code, sampleVisibilityFlag()) as EntryRow | undefined;
+  return row ? toPublic(row) : null;
+}
+
+export function photoCodeForId(id: string): string | null {
+  ensureSamplePhotos();
+  const row = getDb()
+    .prepare(`SELECT public_code FROM photo_entries e WHERE e.id = ? AND ${sampleVisibilitySql()}`)
+    .get(id, sampleVisibilityFlag()) as { public_code: string | null } | undefined;
+  return row?.public_code || null;
+}
+
 export function listReviewPhotos(): ReviewPhoto[] {
+  ensureSamplePhotos();
   const rows = getDb()
-    .prepare(`${selectEntry} ORDER BY e.created_at DESC`)
-    .all("") as EntryRow[];
+    .prepare(`${selectEntry} WHERE ${sampleVisibilitySql()} ORDER BY e.created_at DESC`)
+    .all("", sampleVisibilityFlag()) as EntryRow[];
   return rows.map(toReview);
 }
 
@@ -136,6 +172,9 @@ export function photoImageKey(
     .get(id) as { status: PhotoStatus; vote_key: string; thumb_key: string } | undefined;
   if (!row) return null;
   if (row.status !== "approved" && !reviewer) return null;
+  if ((row.vote_key.startsWith("local-sample/") || row.thumb_key.startsWith("local-sample/")) && !samplePhotosEnabled()) {
+    return null;
+  }
   return {
     key: variant === "thumb" ? row.thumb_key : row.vote_key,
     approved: row.status === "approved",
@@ -202,7 +241,7 @@ export async function submitPhoto(input: {
   drinkName: unknown;
   caption: unknown;
 }): Promise<
-  | { ok: true; id: string; status: "pending" | "approved" }
+  | { ok: true; id: string; code: string; status: "pending" | "approved" }
   | { ok: false; code: string; message: string; fields?: FieldErrors }
 > {
   const parsed = validatePhotoEntry(input);
@@ -223,13 +262,18 @@ export async function submitPhoto(input: {
 
   if (upload.consumed_at) {
     const existing = getDb()
-      .prepare("SELECT id FROM photo_entries WHERE original_key = ?")
-      .get(upload.object_key) as { id: string } | undefined;
+      .prepare("SELECT id, public_code FROM photo_entries WHERE original_key = ?")
+      .get(upload.object_key) as { id: string; public_code: string | null } | undefined;
     if (existing) {
       const row = getDb()
-        .prepare("SELECT status FROM photo_entries WHERE id = ?")
-        .get(existing.id) as { status: string } | undefined;
-      return { ok: true, id: existing.id, status: row?.status === "approved" ? "approved" : "pending" };
+        .prepare("SELECT status, public_code FROM photo_entries WHERE id = ?")
+        .get(existing.id) as { status: string; public_code: string | null } | undefined;
+      return {
+        ok: true,
+        id: existing.id,
+        code: row?.public_code || existing.public_code || "",
+        status: row?.status === "approved" ? "approved" : "pending",
+      };
     }
     return { ok: false, code: "UPLOAD_USED", message: "That upload was already used. Choose the photo again." };
   }
@@ -297,10 +341,11 @@ export async function submitPhoto(input: {
 
     const now = new Date().toISOString();
     const status: "pending" | "approved" = photoReviewBypassed() ? "approved" : "pending";
+    const publicCode = takePhotoCode();
     db.prepare(
       `INSERT INTO photo_entries (
-        id, person_name, email, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, person_name, email, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at, public_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       photoId,
       parsed.value.personName,
@@ -314,6 +359,7 @@ export async function submitPhoto(input: {
       thumbKey,
       now,
       status === "approved" ? now : null,
+      publicCode,
     );
     db.prepare("UPDATE photo_uploads SET consumed_at = ? WHERE id = ?").run(now, upload.id);
     db.exec("COMMIT");
@@ -334,10 +380,15 @@ export async function submitPhoto(input: {
     throw error;
   }
 
-  const saved = getDb().prepare("SELECT status FROM photo_entries WHERE id = ?").get(photoId) as
-    | { status: string }
+  const saved = getDb().prepare("SELECT status, public_code FROM photo_entries WHERE id = ?").get(photoId) as
+    | { status: string; public_code: string | null }
     | undefined;
-  return { ok: true, id: photoId, status: saved?.status === "approved" ? "approved" : "pending" };
+  return {
+    ok: true,
+    id: photoId,
+    code: saved?.public_code || "",
+    status: saved?.status === "approved" ? "approved" : "pending",
+  };
 }
 
 export function castPhotoVote(

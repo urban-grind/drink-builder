@@ -7,12 +7,12 @@ import { PhotoVoteButton } from "@/components/photo-vote-button";
 import { useVoter } from "@/components/use-voter";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { firstName } from "@/lib/first-name";
+import { firstName, photoEntryPath } from "@/lib/first-name";
 import type { PublicPhoto } from "@/lib/photo-types";
 import { formatWhen } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
-export function PhotoDetail({ id }: { id: string }) {
+export function PhotoDetail({ code }: { code: string }) {
   const { voterId, ready } = useVoter();
   const [photo, setPhoto] = useState<PublicPhoto | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
@@ -23,7 +23,7 @@ export function PhotoDetail({ id }: { id: string }) {
     if (!ready || !voterId) return;
     const controller = new AbortController();
     const query = new URLSearchParams({ voterId });
-    requestJson<{ photo: PublicPhoto }>(`/api/photos/${id}?${query.toString()}`, { signal: controller.signal })
+    requestJson<{ photo: PublicPhoto }>(`/api/p/${code}?${query.toString()}`, { signal: controller.signal })
       .then((data) => {
         setPhoto(data.photo);
         setStatus("ready");
@@ -39,7 +39,7 @@ export function PhotoDetail({ id }: { id: string }) {
         setError(caught instanceof Error ? caught.message : "This photo didn't load.");
       });
     return () => controller.abort();
-  }, [id, ready, voterId, reloadKey]);
+  }, [code, ready, voterId, reloadKey]);
 
   if (status === "loading") {
     return (
@@ -101,7 +101,7 @@ export function PhotoDetail({ id }: { id: string }) {
           </p>
           <PhotoVoteButton photo={photo} onUpdated={setPhoto} />
         </div>
-        <PhotoShare drinkName={photo.drinkName} photoUrl={photo.imageUrl} entryPath={`/photos/${photo.id}`} />
+        <PhotoShare drinkName={photo.drinkName} photoUrl={photo.imageUrl} entryPath={photoEntryPath(photo.code)} />
         <time dateTime={photo.createdAt} className="text-sm">
           {formatWhen(photo.createdAt)}
         </time>

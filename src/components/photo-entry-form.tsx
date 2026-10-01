@@ -140,7 +140,7 @@ export function PhotoEntryForm({
         setUploadId(presign.uploadId);
       }
 
-      const saved = await requestJson<{ id: string; status?: string }>("/api/photos", {
+      const saved = await requestJson<{ id: string; code?: string; status?: string }>("/api/photos", {
         method: "POST",
         body: JSON.stringify({
           uploadId: currentUpload,
@@ -152,10 +152,10 @@ export function PhotoEntryForm({
       });
       if (saved.status === "approved") {
         onFinished?.();
-        router.push(photoEntryPath(saved.id));
+        router.push(photoEntryPath(saved.code || ""));
         return;
       }
-      setSavedId(saved.id);
+      setSavedId(saved.code || "");
       setOutcome("pending");
     } catch (error) {
       if (error instanceof ApiRequestError) {

@@ -9,9 +9,11 @@ import type { PublicPhoto } from "@/lib/photo-types";
 export function PhotoVoteButton({
   photo,
   onUpdated,
+  appearance = "button",
 }: {
   photo: PublicPhoto;
   onUpdated: (photo: PublicPhoto) => void;
+  appearance?: "button" | "count";
 }) {
   const { voterId, ready } = useVoter();
   const [pending, setPending] = useState(false);
@@ -51,6 +53,9 @@ export function PhotoVoteButton({
     }
   }
 
+  const countLabel = `${photo.voted ? "Voted" : "Vote"} · ${photo.voteCount}`;
+  const label = pending ? "Saving…" : appearance === "count" ? countLabel : photo.voted ? "Voted" : "Vote";
+
   return (
     <div className="flex flex-col items-start gap-1">
       <Button
@@ -64,7 +69,7 @@ export function PhotoVoteButton({
         }}
         className="h-11 rounded-full px-4"
       >
-        {pending ? "Saving…" : photo.voted ? "Voted" : "Vote"}
+        {label}
       </Button>
       {error ? (
         <p id={errorId} role="alert" className="max-w-xs text-sm text-destructive">
