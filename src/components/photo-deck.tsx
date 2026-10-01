@@ -204,13 +204,14 @@ export function PhotoDeck() {
   useEffect(() => {
     const node = cardRef.current;
     if (!node) return;
+    const card: HTMLDivElement = node;
 
     function onDown(event: PointerEvent) {
       if (event.button !== 0 || !canDragRef.current) return;
       startX.current = event.clientX;
       setFlight("drag");
       try {
-        node.setPointerCapture(event.pointerId);
+        card.setPointerCapture(event.pointerId);
       } catch {
         // The card still follows the pointer if capture is unavailable.
       }
@@ -233,15 +234,15 @@ export function PhotoDeck() {
       }
     }
 
-    node.addEventListener("pointerdown", onDown);
-    node.addEventListener("pointermove", onMove);
-    node.addEventListener("pointerup", onUp);
-    node.addEventListener("pointercancel", onUp);
+    card.addEventListener("pointerdown", onDown);
+    card.addEventListener("pointermove", onMove);
+    card.addEventListener("pointerup", onUp);
+    card.addEventListener("pointercancel", onUp);
     return () => {
-      node.removeEventListener("pointerdown", onDown);
-      node.removeEventListener("pointermove", onMove);
-      node.removeEventListener("pointerup", onUp);
-      node.removeEventListener("pointercancel", onUp);
+      card.removeEventListener("pointerdown", onDown);
+      card.removeEventListener("pointermove", onMove);
+      card.removeEventListener("pointerup", onUp);
+      card.removeEventListener("pointercancel", onUp);
     };
   }, [status, current?.id]);
 
