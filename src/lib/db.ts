@@ -138,6 +138,16 @@ function ensurePhotoTables(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_photo_votes_voter ON photo_votes (voter_id);
     CREATE INDEX IF NOT EXISTS idx_photo_entries_status ON photo_entries (status, created_at);
+    CREATE TABLE IF NOT EXISTS photo_swipes (
+      voter_id TEXT NOT NULL,
+      photo_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (voter_id, photo_id),
+      FOREIGN KEY (photo_id) REFERENCES photo_entries(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_photo_swipes_voter ON photo_swipes (voter_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_photo_swipes_photo ON photo_swipes (photo_id, action);
   `);
   const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as { name: string }[];
   if (!columns.some((column) => column.name === "public_code")) {

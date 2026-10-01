@@ -12,10 +12,15 @@ import {
   castPhotoVote,
   createUpload,
   getPublicPhoto,
+  compareLeaderboard,
   listPhotoBoard,
+  listPhotoDeck,
+  listPhotoLeaderboard,
   listReviewPhotos,
   moderatePhoto,
   submitPhoto,
+  swipeDeckPhoto,
+  undoDeckSwipe,
 } from "@/lib/photos";
 import { firstName, photoEntryPath } from "@/lib/first-name";
 import { parsePhotoUploadRequest, validatePhotoEntry } from "@/lib/photo-validation";
@@ -462,6 +467,166 @@ describe("photo contest", { concurrency: false }, () => {
         false,
       );
       assert.equal(getPublicPhoto("11111111-1111-4111-8111-111111111101", null), null);
+    } finally {
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  function everyDealtPhoto(voter: string) {
+    const all = [];
+    const seen = new Set<string>();
+    for (let page = 0; page < 15; page += 1) {
+      const next = listPhotoDeck(voter, { limit: 8, except: [...seen] });
+      const fresh = next.filter((photo) => !seen.has(photo.id));
+      if (fresh.length === 0) break;
+      for (const photo of fresh) {
+        seen.add(photo.id);
+        all.push(photo);
+      }
+    }
+    return all;
+  }
+
+  it("deals each photo once, skips without a vote, and undoes only the last swipe", () => {
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+    try {
+      env.NODE_ENV = "development";
+      const voter = crypto.randomUUID();
+      const deck = everyDealtPhoto(voter).filter((photo) => photo.thumbUrl.startsWith("/photos/"));
+      assert.equal(deck.length, 5);
+      assert.equal(new Set(deck.map((photo) => photo.id)).size, 5);
+
+      const skipped = deck[0];
+      const voted = deck[1];
+      assert.ok(skipped && voted);
+      const skipResult = swipeDeckPhoto(skipped.id, voter, "skip");
+      assert.equal(skipResult.ok, true);
+      assert.equal(getPublicPhoto(skipped.id, voter)?.voteCount, skipped.voteCount);
+      assert.equal(
+        everyDealtPhoto(voter).some((photo) => photo.id === skipped.id),
+        false,
+      );
+
+      const before = getPublicPhoto(voted.id, voter)?.voteCount ?? 0;
+      const voteResult = swipeDeckPhoto(voted.id, voter, "vote");
+      assert.equal(voteResult.ok, true);
+      assert.equal(getPublicPhoto(voted.id, voter)?.voteCount, before + 1);
+      assert.equal(
+        everyDealtPhoto(voter).some((photo) => photo.id === voted.id),
+        false,
+      );
+
+      const undoneVote = undoDeckSwipe(voter, voted.id);
+      assert.equal(undoneVote.ok, true);
+      if (undoneVote.ok) assert.equal(undoneVote.action, "vote");
+      assert.equal(getPublicPhoto(voted.id, voter)?.voteCount, before);
+      assert.equal(
+        everyDealtPhoto(voter).some((photo) => photo.id === voted.id),
+        true,
+      );
+
+      const notLast = undoDeckSwipe(voter, voted.id);
+      assert.equal(notLast.ok, false);
+
+      const undoneSkip = undoDeckSwipe(voter, skipped.id);
+      assert.equal(undoneSkip.ok, true);
+      if (undoneSkip.ok) assert.equal(undoneSkip.action, "skip");
+      assert.equal(
+        everyDealtPhoto(voter).some((photo) => photo.id === skipped.id),
+        true,
+      );
+
+      env.NODE_ENV = "production";
+      assert.equal(
+        everyDealtPhoto(voter).some((photo) => photo.thumbUrl.startsWith("/photos/")),
+        false,
+      );
+    } finally {
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("serves the deck a few cards at a time and keeps one swipe row per voter", () => {
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+    try {
+      env.NODE_ENV = "development";
+      const names = new Set(
+        (getDb().prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as { name: string }[]).map(
+          (row) => row.name,
+        ),
+      );
+      assert.equal(names.has("idx_photo_votes_voter"), true);
+      assert.equal(names.has("idx_photo_swipes_voter"), true);
+      assert.equal(names.has("idx_photo_swipes_photo"), true);
+      const votePk = getDb()
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'photo_votes'")
+        .get() as { sql: string };
+      const swipePk = getDb()
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'photo_swipes'")
+        .get() as { sql: string };
+      assert.match(votePk.sql, /PRIMARY KEY \(photo_id, voter_id\)/);
+      assert.match(swipePk.sql, /PRIMARY KEY \(voter_id, photo_id\)/);
+
+      const voter = crypto.randomUUID();
+      const first = listPhotoDeck(voter, { limit: 2 });
+      assert.equal(first.length, 2);
+      const second = listPhotoDeck(voter, { limit: 2, except: first.map((photo) => photo.id) });
+      assert.equal(second.length, 2);
+      const seen = new Set([...first, ...second].map((photo) => photo.id));
+      assert.equal(seen.size, 4);
+      const dealt = listPhotoDeck(voter);
+      assert.equal(dealt.length, 5);
+      assert.equal(listPhotoLeaderboard().length <= 20, true);
+    } finally {
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("ranks the leaderboard by votes, then like percentage, and keeps skips on the server", () => {
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+    try {
+      assert.ok(compareLeaderboard({ voteCount: 5, skipCount: 0 }, { voteCount: 4, skipCount: 0 }) < 0);
+      assert.ok(compareLeaderboard({ voteCount: 5, skipCount: 1 }, { voteCount: 5, skipCount: 5 }) < 0);
+
+      env.NODE_ENV = "development";
+      const voter = crypto.randomUUID();
+      const before = listPhotoLeaderboard().filter((photo) => photo.thumbUrl.startsWith("/photos/"));
+      assert.equal(before.length, 5);
+      for (let index = 0; index < before.length - 1; index += 1) {
+        const current = before[index];
+        const next = before[index + 1];
+        assert.ok(current && next);
+        assert.ok(compareLeaderboard(current, next) <= 0);
+      }
+
+      const photo = before[0];
+      assert.ok(photo);
+      const skipped = swipeDeckPhoto(photo.id, voter, "skip");
+      assert.equal(skipped.ok, true);
+      assert.equal(swipeDeckPhoto(photo.id, voter, "vote").ok, false);
+      const afterSkip = listPhotoLeaderboard().find((entry) => entry.id === photo.id);
+      assert.ok(afterSkip);
+      assert.equal(afterSkip.voteCount, photo.voteCount);
+      assert.equal(afterSkip.skipCount, photo.skipCount + 1);
+      assert.equal(afterSkip.likePercent, Math.round((photo.voteCount / (photo.voteCount + photo.skipCount + 1)) * 100));
+
+      const undone = undoDeckSwipe(voter, photo.id);
+      assert.equal(undone.ok, true);
+      const restored = listPhotoLeaderboard().find((entry) => entry.id === photo.id);
+      assert.equal(restored?.skipCount, photo.skipCount);
+      assert.equal(restored?.voteCount, photo.voteCount);
+
+      env.NODE_ENV = "production";
+      assert.equal(
+        listPhotoLeaderboard().some((entry) => entry.thumbUrl.startsWith("/photos/")),
+        false,
+      );
     } finally {
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;

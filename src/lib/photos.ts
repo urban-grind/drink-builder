@@ -5,7 +5,7 @@ import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
 import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib/sample-photos";
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
-import type { PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
+import type { LeaderboardEntry, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
 import { validatePhotoEntry } from "@/lib/photo-validation";
 import type { FieldErrors } from "@/lib/types";
 
@@ -133,6 +133,193 @@ export function getPublicPhoto(id: string, voterId: string | null): PublicPhoto 
     .prepare(`${selectEntry} WHERE e.id = ? AND e.status = 'approved' AND ${sampleVisibilitySql()}`)
     .get(voterId ?? "", id, sampleVisibilityFlag()) as EntryRow | undefined;
   return row ? toPublic(row) : null;
+}
+
+/** Votes divided by votes plus skips. Null when nobody has acted on the photo. */
+export function likeRate(voteCount: number, skipCount: number): number | null {
+  const seen = voteCount + skipCount;
+  if (seen === 0) return null;
+  return voteCount / seen;
+}
+
+/** Highest vote count first. Equal counts use the higher like percentage. */
+export function compareLeaderboard(
+  a: { voteCount: number; skipCount: number },
+  b: { voteCount: number; skipCount: number },
+): number {
+  if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
+  return (likeRate(b.voteCount, b.skipCount) ?? -1) - (likeRate(a.voteCount, a.skipCount) ?? -1);
+}
+
+/** How many top photos the leaderboard returns. Thumbs only, not every entry. */
+export const LEADERBOARD_LIMIT = 20;
+
+/** How many cards a phone asks for at once. */
+export const DECK_PAGE_SIZE = 5;
+
+/** Approved photos, ranked for the leaderboard. Samples stay off in production. */
+export function listPhotoLeaderboard(): LeaderboardEntry[] {
+  ensureSamplePhotos();
+  const rows = getDb()
+    .prepare(
+      `SELECT
+         e.id,
+         e.person_name,
+         e.drink_name,
+         e.thumb_key,
+         (SELECT COUNT(*) FROM photo_votes v WHERE v.photo_id = e.id) AS vote_count,
+         (SELECT COUNT(*) FROM photo_swipes s WHERE s.photo_id = e.id AND s.action = 'skip') AS skip_count
+       FROM photo_entries e
+       WHERE e.status = 'approved' AND ${sampleVisibilitySql()}
+       ORDER BY vote_count DESC,
+         CASE
+           WHEN vote_count + skip_count = 0 THEN -1.0
+           ELSE CAST(vote_count AS REAL) / (vote_count + skip_count)
+         END DESC
+       LIMIT ?`,
+    )
+    .all(sampleVisibilityFlag(), LEADERBOARD_LIMIT) as {
+    id: string;
+    person_name: string;
+    drink_name: string;
+    thumb_key: string;
+    vote_count: number;
+    skip_count: number;
+  }[];
+  return rows
+    .map((row) => {
+      const voteCount = Number(row.vote_count);
+      const skipCount = Number(row.skip_count);
+      const rate = likeRate(voteCount, skipCount);
+      const localThumb = localSampleAsset(row.thumb_key);
+      return {
+        id: row.id,
+        personName: row.person_name,
+        drinkName: row.drink_name,
+        thumbUrl: localThumb ?? thumbUrl(row.id),
+        voteCount,
+        skipCount,
+        likePercent: rate === null ? null : Math.round(rate * 100),
+      };
+    })
+    .sort(compareLeaderboard);
+}
+
+/**
+ * The next few approved photos this voter has not voted on or skipped.
+ * `except` is the small stack already on the phone, so those images are not sent again.
+ */
+export function listPhotoDeck(
+  voterId: string,
+  options?: { limit?: number; except?: string[] },
+): PublicPhoto[] {
+  ensureSamplePhotos();
+  const limit = Math.min(Math.max(options?.limit ?? DECK_PAGE_SIZE, 1), 8);
+  const except = (options?.except ?? []).filter((id) => isUuid(id)).slice(0, 32);
+  const exceptSql = except.length > 0 ? ` AND e.id NOT IN (${except.map(() => "?").join(", ")})` : "";
+  const rows = getDb()
+    .prepare(
+      `${selectEntry}
+       WHERE e.status = 'approved'
+         AND ${sampleVisibilitySql()}
+         AND e.id NOT IN (
+           SELECT photo_id FROM photo_votes WHERE voter_id = ?
+           UNION
+           SELECT photo_id FROM photo_swipes WHERE voter_id = ?
+         )
+         ${exceptSql}
+       ORDER BY RANDOM()
+       LIMIT ?`,
+    )
+    .all(voterId, sampleVisibilityFlag(), voterId, voterId, ...except, limit) as EntryRow[];
+  return rows.map(toPublic);
+}
+
+export function swipeDeckPhoto(
+  photoId: string,
+  voterId: string,
+  action: "vote" | "skip",
+): { ok: true; photo: PublicPhoto } | { ok: false; code: "NOT_FOUND" | "ALREADY_ACTED" } {
+  const db = beginImmediate();
+  try {
+    const photo = db
+      .prepare("SELECT 1 AS found FROM photo_entries WHERE id = ? AND status = 'approved'")
+      .get(photoId);
+    if (!photo) {
+      db.exec("ROLLBACK");
+      return { ok: false, code: "NOT_FOUND" };
+    }
+    const acted = db
+      .prepare(
+        `SELECT 1 AS found FROM photo_swipes WHERE photo_id = ? AND voter_id = ?
+         UNION
+         SELECT 1 AS found FROM photo_votes WHERE photo_id = ? AND voter_id = ?`,
+      )
+      .get(photoId, voterId, photoId, voterId);
+    if (acted) {
+      db.exec("ROLLBACK");
+      return { ok: false, code: "ALREADY_ACTED" };
+    }
+    const now = new Date().toISOString();
+    if (action === "vote") {
+      db.prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at) VALUES (?, ?, ?)").run(
+        photoId,
+        voterId,
+        now,
+      );
+    }
+    db.prepare("INSERT INTO photo_swipes (voter_id, photo_id, action, created_at) VALUES (?, ?, ?, ?)").run(
+      voterId,
+      photoId,
+      action,
+      now,
+    );
+    db.exec("COMMIT");
+  } catch (error) {
+    rollbackQuietly();
+    if (isUniqueConstraint(error)) return { ok: false, code: "ALREADY_ACTED" };
+    throw error;
+  }
+  const photo = getPublicPhoto(photoId, voterId);
+  if (!photo) return { ok: false, code: "NOT_FOUND" };
+  return { ok: true, photo };
+}
+
+/** Reverses only this voter's latest swipe. A right swipe drops that vote. A left swipe only returns the photo. */
+export function undoDeckSwipe(
+  voterId: string,
+  photoId: string,
+):
+  | { ok: true; action: "vote" | "skip"; photo: PublicPhoto }
+  | { ok: false; code: "NOT_LAST" | "NOT_FOUND" } {
+  const db = beginImmediate();
+  let action: "vote" | "skip" = "skip";
+  try {
+    const latest = db
+      .prepare(
+        `SELECT photo_id, action FROM photo_swipes
+         WHERE voter_id = ?
+         ORDER BY created_at DESC, rowid DESC
+         LIMIT 1`,
+      )
+      .get(voterId) as { photo_id: string; action: string } | undefined;
+    if (!latest || latest.photo_id !== photoId) {
+      db.exec("ROLLBACK");
+      return { ok: false, code: "NOT_LAST" };
+    }
+    action = latest.action === "vote" ? "vote" : "skip";
+    if (action === "vote") {
+      db.prepare("DELETE FROM photo_votes WHERE photo_id = ? AND voter_id = ?").run(photoId, voterId);
+    }
+    db.prepare("DELETE FROM photo_swipes WHERE photo_id = ? AND voter_id = ?").run(photoId, voterId);
+    db.exec("COMMIT");
+  } catch (error) {
+    rollbackQuietly();
+    throw error;
+  }
+  const photo = getPublicPhoto(photoId, voterId);
+  if (!photo) return { ok: false, code: "NOT_FOUND" };
+  return { ok: true, action, photo };
 }
 
 export function getPublicPhotoByCode(code: string, voterId: string | null): PublicPhoto | null {

@@ -19,6 +19,17 @@ export type ReviewPhoto = PublicPhoto & {
   status: PhotoStatus;
 };
 
+/** A ranked contest photo. likePercent is null until someone votes or skips. */
+export type LeaderboardEntry = {
+  id: string;
+  personName: string;
+  drinkName: string;
+  thumbUrl: string;
+  voteCount: number;
+  skipCount: number;
+  likePercent: number | null;
+};
+
 export type PhotoEntryInput = {
   personName: string;
   email: string;
