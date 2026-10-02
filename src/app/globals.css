@@ -234,7 +234,7 @@
   color: var(--ug-green);
 }
 
-main button {
+main:not(.ug-swipe) button {
   border-radius: 999px;
   border-color: transparent;
   background-color: #274b3a;
@@ -243,12 +243,12 @@ main button {
   font-weight: 700;
 }
 
-main button:hover {
+main:not(.ug-swipe) button:hover {
   background-color: #1e3b2e;
 }
 
-main button[aria-pressed="true"],
-main button[aria-pressed="true"]:hover {
+main:not(.ug-swipe) button[aria-pressed="true"],
+main:not(.ug-swipe) button[aria-pressed="true"]:hover {
   border-color: #274b3a;
   background-color: #ffffff;
   color: #274b3a;

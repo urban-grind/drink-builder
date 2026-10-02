@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { useEarlyPhotoUpload } from "@/components/use-early-photo-upload";
 import { rememberMyPhoto } from "@/lib/local-votes";
 import {
   PHOTO_CAPTION_MAX,
+  PHOTO_EMAIL_MAX,
   PHOTO_MAX_BYTES,
   PHOTO_NAME_MAX,
   normalizePhotoType,
@@ -20,12 +22,23 @@ import {
 import { photoEntryPath } from "@/lib/first-name";
 import type { FieldErrors } from "@/lib/types";
 
+function splitContact(value: string): { email: string; phone: string } {
+  const trimmed = value.trim();
+  if (!trimmed) return { email: "", phone: "" };
+  if (trimmed.includes("@")) return { email: trimmed, phone: "" };
+  return { email: "", phone: trimmed };
+}
+
 export function PhotoEntryForm({
   presentation = "page",
+  active = true,
   onFinished,
+  onBack,
 }: {
-  presentation?: "page" | "dialog";
+  presentation?: "page" | "dialog" | "shell";
+  active?: boolean;
   onFinished?: () => void;
+  onBack?: () => void;
 }) {
   const router = useRouter();
   const baseId = useId();
@@ -34,6 +47,7 @@ export function PhotoEntryForm({
   const fieldIds: Record<string, string> = {
     photo: `${baseId}-file`,
     personName: `${baseId}-name`,
+    contact: `${baseId}-contact`,
     email: `${baseId}-email`,
     phone: `${baseId}-phone`,
     drinkName: `${baseId}-drink`,
@@ -42,17 +56,19 @@ export function PhotoEntryForm({
   const [personName, setPersonName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [contact, setContact] = useState("");
   const [drinkName, setDrinkName] = useState("");
   const [caption, setCaption] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const previewRef = useRef<string | null>(null);
-  const [uploadId, setUploadId] = useState<string | null>(null);
   const [uploadsEnabled, setUploadsEnabled] = useState<boolean | null>(null);
   const [fields, setFields] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [phase, setPhase] = useState<"finishing" | "saving" | null>(null);
   const [outcome, setOutcome] = useState<"pending" | "approved" | null>(null);
+  const upload = useEarlyPhotoUpload(active);
   const [savedId, setSavedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,7 +93,7 @@ export function PhotoEntryForm({
 
   function onFile(next: File | null) {
     setFile(next);
-    setUploadId(null);
+    upload.clearError();
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     const url = next ? URL.createObjectURL(next) : null;
     previewRef.current = url;
@@ -87,6 +103,22 @@ export function PhotoEntryForm({
       delete copy.photo;
       return copy;
     });
+    if (!next) {
+      upload.invalidate();
+      return;
+    }
+    if (next.size > PHOTO_MAX_BYTES) {
+      upload.invalidate();
+      setFields((current) => ({ ...current, photo: "That photo is over 25MB. Use a smaller one." }));
+      return;
+    }
+    if (!normalizePhotoType(next.type, next.name)) {
+      upload.invalidate();
+      setFields((current) => ({ ...current, photo: "Use a JPEG, PNG, WebP, or HEIC photo." }));
+      return;
+    }
+    if (uploadsEnabled === false) return;
+    void upload.start(next);
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -100,8 +132,12 @@ export function PhotoEntryForm({
       nextFields.photo = "Use a JPEG, PNG, WebP, or HEIC photo.";
     }
 
-    const parsed = validatePhotoEntry({ personName, email, phone, drinkName, caption });
+    const entered = presentation === "shell" ? splitContact(contact) : { email, phone };
+    const parsed = validatePhotoEntry({ personName, email: entered.email, phone: entered.phone, drinkName, caption });
     if (!parsed.ok) Object.assign(nextFields, parsed.fields);
+    if (presentation === "shell" && (nextFields.email || nextFields.phone)) {
+      nextFields.contact = nextFields.email || nextFields.phone;
+    }
     if (!file || Object.keys(nextFields).length > 0 || !parsed.ok) {
       setFields(nextFields);
       const messages = [...new Set(Object.values(nextFields))];
@@ -116,38 +152,19 @@ export function PhotoEntryForm({
     try {
       await requestJson("/api/photos/contact", {
         method: "POST",
-        body: JSON.stringify({ email, phone }),
+        body: JSON.stringify({ email: entered.email, phone: entered.phone }),
       });
 
       if (uploadsEnabled === false) {
         setFormError("Photo uploads aren't available right now.");
         setPending(false);
+        setPhase(null);
         return;
       }
 
-      let currentUpload = uploadId;
-      const contentType = normalizePhotoType(file.type, file.name);
-      if (!contentType) throw new ApiRequestError("VALIDATION", "Use a JPEG, PNG, WebP, or HEIC photo.");
-
-      if (!currentUpload) {
-        const presign = await requestJson<{ uploadId: string; uploadUrl: string; contentType: string }>(
-          "/api/photos/upload",
-          {
-            method: "POST",
-            body: JSON.stringify({ contentType, contentLength: file.size, fileName: file.name }),
-          },
-        );
-        const put = await fetch(presign.uploadUrl, {
-          method: "PUT",
-          body: file,
-          headers: { "content-type": presign.contentType },
-        });
-        if (!put.ok) {
-          throw new ApiRequestError("UPLOAD_FAILED", "The photo didn't upload. Try again.");
-        }
-        currentUpload = presign.uploadId;
-        setUploadId(presign.uploadId);
-      }
+      if (!upload.isReady()) setPhase("finishing");
+      const currentUpload = await upload.waitUntilReady();
+      setPhase("saving");
 
       const saved = await requestJson<{ id: string; code?: string; status?: string }>("/api/photos", {
         method: "POST",
@@ -160,6 +177,7 @@ export function PhotoEntryForm({
           caption: parsed.value.caption,
         }),
       });
+      upload.keep();
       rememberMyPhoto(saved.id);
       if (saved.status === "approved") {
         onFinished?.();
@@ -178,6 +196,11 @@ export function PhotoEntryForm({
           if (!next.phone) next.phone = error.message;
         }
         if (error.code === "PHOTOS_UNAVAILABLE") setUploadsEnabled(false);
+        if (error.code === "EMAIL_IN_USE" || error.code === "PHONE_IN_USE" || error.code === "CONTACT_IN_USE") {
+          upload.invalidate();
+          if (file && uploadsEnabled !== false) void upload.start(file);
+        }
+        if (presentation === "shell" && (next.email || next.phone)) next.contact = next.email || next.phone;
         setFields(next);
         setFormError(error.message);
         focusFirst(next);
@@ -185,6 +208,7 @@ export function PhotoEntryForm({
         setFormError("The photo didn't go through. Try again.");
       }
       setPending(false);
+      setPhase(null);
     }
   }
 
@@ -203,14 +227,153 @@ export function PhotoEntryForm({
             entryPath={photoEntryPath(savedId)}
           />
         </div>
-        <Link href="/" className="mt-6 inline-block text-sm underline-offset-4 hover:underline">
-          Back to the photos
-        </Link>
+        {presentation === "shell" && onBack ? (
+          <button type="button" onClick={onBack} className="mt-6 text-sm font-semibold text-[#274b3a]">
+            Back to voting
+          </button>
+        ) : (
+          <Link href="/" className="mt-6 inline-block text-sm underline-offset-4 hover:underline">
+            Back to the photos
+          </Link>
+        )}
       </div>
     );
   }
 
-  const buttonLabel = pending ? "Your photo is going up" : "Add photo";
+  const buttonLabel =
+    phase === "finishing" ? "Finishing your photo" : pending ? "Your photo is going up" : presentation === "shell" ? "Submit photo" : "Add photo";
+  const photoMessage = fields.photo || upload.photoError;
+  const contactMessage = fields.contact || fields.email || fields.phone;
+
+  if (presentation === "shell") {
+    return (
+      <form className="flex flex-col gap-4" noValidate aria-busy={pending} onSubmit={onSubmit}>
+        {uploadsEnabled === false ? (
+          <p role="status" className="rounded-2xl bg-white px-4 py-3 text-sm">
+            Photo uploads aren&apos;t available right now.
+          </p>
+        ) : null}
+
+        <label
+          htmlFor={fieldIds.photo}
+          className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#274b3a]/35 bg-white/50 px-4 py-6 text-center"
+        >
+          <input
+            id={fieldIds.photo}
+            name="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
+            className="sr-only"
+            aria-invalid={Boolean(photoMessage)}
+            aria-describedby={photoMessage ? `${fieldIds.photo}-error` : undefined}
+            onChange={(event) => onFile(event.target.files?.[0] ?? null)}
+          />
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="Selected drink" className="mb-3 max-h-40 w-full rounded-xl object-cover" />
+          ) : null}
+          <span className="text-base font-semibold text-[#274b3a]">Choose a photo</span>
+          <span className="mt-1 text-sm text-[#274b3a]/70">Show off your Urban Grind drink.</span>
+        </label>
+        {upload.uploading && !pending ? (
+          <p role="status" className="text-sm">
+            Your photo is going up.
+          </p>
+        ) : null}
+        {photoMessage ? (
+          <p id={`${fieldIds.photo}-error`} role="alert" className="text-sm text-destructive">
+            {photoMessage}
+          </p>
+        ) : null}
+
+        <div className="grid gap-1.5">
+          <Label htmlFor={fieldIds.personName}>Your name</Label>
+          <Input
+            id={fieldIds.personName}
+            name="personName"
+            value={personName}
+            onChange={(event) => setPersonName(event.target.value)}
+            maxLength={PHOTO_NAME_MAX}
+            autoComplete="name"
+            aria-invalid={Boolean(fields.personName)}
+            aria-describedby={fields.personName ? `${fieldIds.personName}-error` : undefined}
+            placeholder="e.g. Elena"
+          />
+          {fields.personName ? (
+            <p id={`${fieldIds.personName}-error`} role="alert" className="text-sm text-destructive">
+              {fields.personName}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor={fieldIds.contact}>Phone or email</Label>
+          <Input
+            id={fieldIds.contact}
+            name="contact"
+            value={contact}
+            onChange={(event) => setContact(event.target.value)}
+            maxLength={PHOTO_EMAIL_MAX}
+            autoComplete="on"
+            aria-invalid={Boolean(contactMessage)}
+            aria-describedby={contactMessage ? `${fieldIds.contact}-error ${contactHelpId}` : contactHelpId}
+            placeholder="705-555-0199 or name@email.com"
+          />
+          <p id={contactHelpId} className="text-sm text-[#274b3a]/70">
+            A phone number or an email is enough. We keep it private.
+          </p>
+          {contactMessage ? (
+            <p id={`${fieldIds.contact}-error`} role="alert" className="text-sm text-destructive">
+              {contactMessage}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor={fieldIds.drinkName}>Drink</Label>
+          <Input
+            id={fieldIds.drinkName}
+            name="drinkName"
+            value={drinkName}
+            onChange={(event) => setDrinkName(event.target.value)}
+            maxLength={PHOTO_NAME_MAX}
+            autoComplete="off"
+            aria-invalid={Boolean(fields.drinkName)}
+            aria-describedby={fields.drinkName ? `${fieldIds.drinkName}-error` : undefined}
+            placeholder="What you ordered"
+          />
+          {fields.drinkName ? (
+            <p id={`${fieldIds.drinkName}-error`} role="alert" className="text-sm text-destructive">
+              {fields.drinkName}
+            </p>
+          ) : null}
+        </div>
+
+        <p className="text-sm text-[#274b3a]/70">The upload date is added automatically.</p>
+
+        {pending ? (
+          <p role="status" className="text-sm font-semibold">
+            {phase === "finishing" ? "Finishing your photo." : "Your photo is going up."}
+          </p>
+        ) : null}
+
+        {formError ? (
+          <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {formError}
+          </p>
+        ) : null}
+
+        <Button type="submit" disabled={pending || uploadsEnabled === false} className="h-12 rounded-full bg-[#274b3a] px-6 text-base text-[#f3f2ef]">
+          {buttonLabel}
+        </Button>
+        {onBack ? (
+          <button type="button" onClick={onBack} className="text-sm font-semibold text-[#274b3a]">
+            Back to voting
+          </button>
+        ) : null}
+      </form>
+    );
+  }
 
   return (
     <form className="ug-board flex flex-col gap-6" noValidate aria-busy={pending} onSubmit={onSubmit}>
@@ -238,17 +401,22 @@ export function PhotoEntryForm({
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
             className="block w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#274b3a] file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
-            aria-invalid={Boolean(fields.photo)}
-            aria-describedby={fields.photo ? `${fieldIds.photo}-error` : undefined}
+            aria-invalid={Boolean(photoMessage)}
+            aria-describedby={photoMessage ? `${fieldIds.photo}-error` : undefined}
             onChange={(event) => onFile(event.target.files?.[0] ?? null)}
           />
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={preview} alt="Selected drink" className="max-h-80 w-full rounded-2xl object-contain" />
           ) : null}
-          {fields.photo ? (
+          {upload.uploading && !pending ? (
+            <p role="status" className="text-sm">
+              Your photo is going up.
+            </p>
+          ) : null}
+          {photoMessage ? (
             <p id={`${fieldIds.photo}-error`} role="alert" className="text-sm text-destructive">
-              {fields.photo}
+              {photoMessage}
             </p>
           ) : null}
         </div>
@@ -370,7 +538,7 @@ export function PhotoEntryForm({
 
         {pending ? (
           <p role="status" className="text-base font-bold">
-            Your photo is going up.
+            {phase === "finishing" ? "Finishing your photo." : "Your photo is going up."}
           </p>
         ) : null}
 

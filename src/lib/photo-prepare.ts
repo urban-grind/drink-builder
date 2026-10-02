@@ -1,0 +1,237 @@
+import { getDb } from "@/lib/db";
+import { contentTypeMatches, detectImageType, makeBoardImages } from "@/lib/photo-image";
+import { withResizeSlot } from "@/lib/resize-queue";
+import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
+import { isUuid } from "@/lib/validation";
+
+export const UPLOAD_TTL_MS = 30 * 60 * 1000;
+
+type UploadRow = {
+  id: string;
+  object_key: string;
+  content_type: string;
+  content_length: number;
+  created_at: string;
+  consumed_at: string | null;
+  vote_key: string | null;
+  thumb_key: string | null;
+  prepare_status: string | null;
+  prepare_error: string | null;
+  prepare_generation: number | bigint | null;
+};
+
+export type PrepareResult = { ok: true } | { ok: false; code: string; message: string };
+
+const inflight = new Map<string, Promise<PrepareResult>>();
+
+let prepareHook: (() => Promise<void> | void) | null = null;
+
+/** Test-only gap after a resize, before its files are kept. */
+export function setPrepareHookForTests(hook: (() => Promise<void> | void) | null): void {
+  prepareHook = hook;
+}
+
+function loadUpload(uploadId: string): UploadRow | undefined {
+  return getDb().prepare("SELECT * FROM photo_uploads WHERE id = ?").get(uploadId) as UploadRow | undefined;
+}
+
+function generationOf(row: UploadRow): number {
+  return Number(row.prepare_generation ?? 0);
+}
+
+export function voteKeyForUpload(uploadId: string): string {
+  return `board/${uploadId}-vote.webp`;
+}
+
+export function thumbKeyForUpload(uploadId: string): string {
+  return `board/${uploadId}-thumb.webp`;
+}
+
+async function deleteQuietly(storage: PhotoStorage, key: string | null): Promise<void> {
+  if (!key) return;
+  try {
+    await storage.delete(key);
+  } catch {
+    // The object may already be gone.
+  }
+}
+
+function changes(result: { changes: number | bigint }): number {
+  return Number(result.changes);
+}
+
+/** Deletes a photo that never became a contest entry. An entry's files stay put. */
+export async function discardUpload(uploadId: string): Promise<{ ok: true } | PrepareResult> {
+  if (!isUuid(uploadId)) {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+  const upload = loadUpload(uploadId);
+  if (!upload || upload.consumed_at) return { ok: true };
+
+  getDb()
+    .prepare(
+      `UPDATE photo_uploads
+       SET prepare_status = 'discarded', prepare_generation = prepare_generation + 1
+       WHERE id = ? AND consumed_at IS NULL`,
+    )
+    .run(uploadId);
+
+  const storage = getPhotoStorage();
+  if (storage) {
+    await deleteQuietly(storage, upload.object_key);
+    await deleteQuietly(storage, upload.vote_key ?? voteKeyForUpload(uploadId));
+    await deleteQuietly(storage, upload.thumb_key ?? thumbKeyForUpload(uploadId));
+  }
+  return { ok: true };
+}
+
+function replaced(): PrepareResult {
+  return { ok: false, code: "UPLOAD_REPLACED", message: "That photo was replaced. Choose it again." };
+}
+
+/**
+ * Resizes one upload into its voting copies. A second call shares the same work.
+ * A discarded or replaced upload cannot keep files written by a slow resize.
+ */
+export function prepareUpload(uploadId: string): Promise<PrepareResult> {
+  const existing = inflight.get(uploadId);
+  if (existing) return existing;
+  const task = runPrepare(uploadId).finally(() => {
+    if (inflight.get(uploadId) === task) inflight.delete(uploadId);
+  });
+  inflight.set(uploadId, task);
+  return task;
+}
+
+async function runPrepare(uploadId: string): Promise<PrepareResult> {
+  if (!isUuid(uploadId)) {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+  const storage = getPhotoStorage();
+  if (!storage) {
+    return { ok: false, code: "PHOTOS_UNAVAILABLE", message: "Photo uploads aren't available right now." };
+  }
+
+  const row = loadUpload(uploadId);
+  if (!row) {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+  if (row.consumed_at || row.prepare_status === "ready") return { ok: true };
+  if (row.prepare_status === "discarded") return replaced();
+  if (row.prepare_status === "failed") {
+    return {
+      ok: false,
+      code: "NOT_AN_IMAGE",
+      message: row.prepare_error || "That file isn't a JPEG, PNG, WebP, or HEIC photo.",
+    };
+  }
+
+  const createdAt = new Date(row.created_at).getTime();
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt > UPLOAD_TTL_MS) {
+    await discardUpload(uploadId);
+    return { ok: false, code: "UPLOAD_EXPIRED", message: "That upload expired. Choose the photo again." };
+  }
+
+  const generation = generationOf(row);
+  const voteKey = voteKeyForUpload(uploadId);
+  const thumbKey = thumbKeyForUpload(uploadId);
+  const claimed = getDb()
+    .prepare(
+      `UPDATE photo_uploads
+       SET vote_key = ?, thumb_key = ?, prepare_status = 'preparing', prepare_error = NULL
+       WHERE id = ? AND consumed_at IS NULL AND prepare_generation = ?
+         AND COALESCE(prepare_status, '') NOT IN ('discarded', 'ready')`,
+    )
+    .run(voteKey, thumbKey, uploadId, generation);
+  if (changes(claimed) === 0) {
+    const again = loadUpload(uploadId);
+    if (again?.consumed_at || again?.prepare_status === "ready") return { ok: true };
+    return replaced();
+  }
+
+  const head = await storage.head(row.object_key);
+  if (!head || head.contentLength !== row.content_length || head.contentLength < 1) {
+    return failPrepare(uploadId, generation, storage, row.object_key, voteKey, thumbKey, {
+      ok: false,
+      code: "UPLOAD_NOT_FOUND",
+      message: "That photo didn't arrive. Choose it and try again.",
+    });
+  }
+
+  const original = await storage.get(row.object_key);
+  if (!original || original.length !== row.content_length) {
+    return failPrepare(uploadId, generation, storage, row.object_key, voteKey, thumbKey, {
+      ok: false,
+      code: "NOT_AN_IMAGE",
+      message: "That photo didn't match the file you chose.",
+    });
+  }
+
+  const kind = detectImageType(original);
+  if (!kind || !contentTypeMatches(row.content_type, kind)) {
+    return failPrepare(uploadId, generation, storage, row.object_key, voteKey, thumbKey, {
+      ok: false,
+      code: "NOT_AN_IMAGE",
+      message: "That file isn't a JPEG, PNG, WebP, or HEIC photo.",
+    });
+  }
+
+  const images = await withResizeSlot(() => makeBoardImages(original));
+  if ("error" in images) {
+    return failPrepare(uploadId, generation, storage, row.object_key, voteKey, thumbKey, {
+      ok: false,
+      code: "NOT_AN_IMAGE",
+      message: images.error,
+    });
+  }
+
+  if (prepareHook) await prepareHook();
+
+  const current = loadUpload(uploadId);
+  if (!current || current.prepare_status === "discarded" || generationOf(current) !== generation) {
+    await deleteQuietly(storage, voteKey);
+    await deleteQuietly(storage, thumbKey);
+    return replaced();
+  }
+
+  await storage.put(voteKey, images.vote, "image/webp");
+  await storage.put(thumbKey, images.thumb, "image/webp");
+
+  const saved = getDb()
+    .prepare(
+      `UPDATE photo_uploads
+       SET prepare_status = 'ready'
+       WHERE id = ? AND prepare_status = 'preparing' AND prepare_generation = ?`,
+    )
+    .run(uploadId, generation);
+  if (changes(saved) === 0) {
+    await deleteQuietly(storage, voteKey);
+    await deleteQuietly(storage, thumbKey);
+    return replaced();
+  }
+  return { ok: true };
+}
+
+async function failPrepare(
+  uploadId: string,
+  generation: number,
+  storage: PhotoStorage,
+  originalKey: string,
+  voteKey: string,
+  thumbKey: string,
+  result: PrepareResult,
+): Promise<PrepareResult> {
+  const message = result.ok ? "" : result.message;
+  const updated = getDb()
+    .prepare(
+      `UPDATE photo_uploads
+       SET prepare_status = 'failed', prepare_error = ?
+       WHERE id = ? AND prepare_status = 'preparing' AND prepare_generation = ?`,
+    )
+    .run(message, uploadId, generation);
+  await deleteQuietly(storage, originalKey);
+  await deleteQuietly(storage, voteKey);
+  await deleteQuietly(storage, thumbKey);
+  if (changes(updated) === 0) return replaced();
+  return result;
+}

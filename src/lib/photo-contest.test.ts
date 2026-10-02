@@ -26,6 +26,7 @@ import {
   undoDeckSwipe,
 } from "@/lib/photos";
 import { firstName, photoEntryPath } from "@/lib/first-name";
+import { discardUpload, prepareUpload, setPrepareHookForTests, voteKeyForUpload } from "@/lib/photo-prepare";
 import { parsePhotoUploadRequest, validatePhotoEntry } from "@/lib/photo-validation";
 import { RESIZE_LIMIT, withResizeSlot } from "@/lib/resize-queue";
 import { getPhotoStorage, readR2Config, setPhotoStorageForTests, type PhotoStorage } from "@/lib/r2";
@@ -807,6 +808,102 @@ describe("photo contest", { concurrency: false }, () => {
 
     const otherEmail = await enter({ email: "other.person@example.com", drinkName: "Other email" });
     assert.equal(otherEmail.ok, true);
+  });
+
+  it("resizes before the entry exists and drops a photo that was replaced", async () => {
+    const source = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: { r: 12, g: 80, b: 40 } },
+    })
+      .jpeg()
+      .toBuffer();
+    const puts: string[] = [];
+    const originalPut = storage.put.bind(storage);
+    storage.put = async (key, body, type) => {
+      puts.push(key);
+      return originalPut(key, body, type);
+    };
+
+    try {
+      const first = await createUpload({ contentType: "image/jpeg", contentLength: source.length });
+      const second = await createUpload({ contentType: "image/jpeg", contentLength: source.length });
+      assert.equal(first.ok, true);
+      assert.equal(second.ok, true);
+      if (!first.ok || !second.ok) return;
+      storage.objects.set(uploadKey(first.uploadId), { body: source, contentType: "image/jpeg" });
+      storage.objects.set(uploadKey(second.uploadId), { body: source, contentType: "image/jpeg" });
+
+      setPrepareHookForTests(async () => {
+        await discardUpload(first.uploadId);
+      });
+      const replaced = await prepareUpload(first.uploadId);
+      assert.equal(replaced.ok, false);
+      if (!replaced.ok) assert.equal(replaced.code, "UPLOAD_REPLACED");
+      assert.equal(storage.objects.has(voteKeyForUpload(first.uploadId)), false);
+      assert.equal(storage.objects.has(uploadKey(first.uploadId)), false);
+      assert.equal(storage.objects.has(uploadKey(second.uploadId)), true);
+      const replacedEntries = getDb()
+        .prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE original_key = ?")
+        .get(uploadKey(first.uploadId)) as { count: number };
+      assert.equal(Number(replacedEntries.count), 0);
+
+      setPrepareHookForTests(null);
+      const boardPutsBefore = puts.filter((key) => key.startsWith("board/")).length;
+      const [once, again] = await Promise.all([prepareUpload(second.uploadId), prepareUpload(second.uploadId)]);
+      assert.equal(once.ok, true);
+      assert.equal(again.ok, true);
+      assert.equal(puts.filter((key) => key.startsWith("board/")).length, boardPutsBefore + 2);
+      const preparedEntries = getDb()
+        .prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE original_key = ?")
+        .get(uploadKey(second.uploadId)) as { count: number };
+      assert.equal(Number(preparedEntries.count), 0);
+
+      const putsAfterPrepare = puts.length;
+      const saved = await submitPhoto({
+        uploadId: second.uploadId,
+        personName: "Nia",
+        email: "prepared@example.com",
+        phone: "",
+        drinkName: "Prepared cup",
+        caption: "",
+      });
+      assert.equal(saved.ok, true);
+      assert.equal(puts.length, putsAfterPrepare);
+      if (!saved.ok) return;
+      const stored = getDb().prepare("SELECT vote_key FROM photo_entries WHERE id = ?").get(saved.id) as {
+        vote_key: string;
+      };
+      assert.equal(stored.vote_key, voteKeyForUpload(second.uploadId));
+      assert.equal(storage.objects.has(voteKeyForUpload(first.uploadId)), false);
+
+      const duplicate = await createUpload({ contentType: "image/jpeg", contentLength: source.length });
+      assert.equal(duplicate.ok, true);
+      if (!duplicate.ok) return;
+      storage.objects.set(uploadKey(duplicate.uploadId), { body: source, contentType: "image/jpeg" });
+      const preparedDuplicate = await prepareUpload(duplicate.uploadId);
+      assert.equal(preparedDuplicate.ok, true);
+      const rejected = await submitPhoto({
+        uploadId: duplicate.uploadId,
+        personName: "Nia",
+        email: "PREPARED@example.com",
+        phone: "",
+        drinkName: "Duplicate prepared",
+        caption: "",
+      });
+      assert.equal(rejected.ok, false);
+      if (!rejected.ok) {
+        assert.equal(rejected.code, "EMAIL_IN_USE");
+        assert.equal(rejected.message, "You already entered with that email. Try again.");
+      }
+      assert.equal(storage.objects.has(uploadKey(duplicate.uploadId)), false);
+      assert.equal(storage.objects.has(voteKeyForUpload(duplicate.uploadId)), false);
+      const duplicateEntries = getDb()
+        .prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE drink_name = 'Duplicate prepared'")
+        .get() as { count: number };
+      assert.equal(Number(duplicateEntries.count), 0);
+    } finally {
+      storage.put = originalPut;
+      setPrepareHookForTests(null);
+    }
   });
 
   it("migrates an email-only table so phone numbers can be stored", () => {

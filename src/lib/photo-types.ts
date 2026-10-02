@@ -25,6 +25,7 @@ export type LeaderboardEntry = {
   id: string;
   personName: string;
   drinkName: string;
+  createdAt: string;
   thumbUrl: string;
   voteCount: number;
   skipCount: number;

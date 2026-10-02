@@ -1,10 +1,9 @@
 import { beginImmediate, getDb, isUniqueConstraint, rollbackQuietly } from "@/lib/db";
-import { contentTypeMatches, detectImageType, makeBoardImages } from "@/lib/photo-image";
-import { withResizeSlot } from "@/lib/resize-queue";
+import { discardUpload, prepareUpload, UPLOAD_TTL_MS, voteKeyForUpload, thumbKeyForUpload } from "@/lib/photo-prepare";
 import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
 import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib/sample-photos";
 import { isUuid } from "@/lib/validation";
-import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
+import { getPhotoStorage } from "@/lib/r2";
 import type { LeaderboardEntry, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
 import {
   EMAIL_ALREADY_ENTERED,
@@ -14,7 +13,6 @@ import {
 } from "@/lib/photo-validation";
 import type { FieldErrors } from "@/lib/types";
 
-const UPLOAD_TTL_MS = 30 * 60 * 1000;
 export const NEW_PHOTO_LIMIT = 10;
 
 /**
@@ -34,6 +32,11 @@ type UploadRow = {
   content_length: number;
   created_at: string;
   consumed_at: string | null;
+  vote_key: string | null;
+  thumb_key: string | null;
+  prepare_status: string | null;
+  prepare_error: string | null;
+  prepare_generation: number | bigint | null;
 };
 
 type EntryRow = {
@@ -173,6 +176,7 @@ export function listPhotoLeaderboard(): LeaderboardEntry[] {
          e.id,
          e.person_name,
          e.drink_name,
+         e.created_at,
          e.thumb_key,
          (SELECT COUNT(*) FROM photo_votes v WHERE v.photo_id = e.id) AS vote_count,
          (SELECT COUNT(*) FROM photo_swipes s WHERE s.photo_id = e.id AND s.action = 'skip') AS skip_count
@@ -189,6 +193,7 @@ export function listPhotoLeaderboard(): LeaderboardEntry[] {
     id: string;
     person_name: string;
     drink_name: string;
+    created_at: string;
     thumb_key: string;
     vote_count: number;
     skip_count: number;
@@ -203,6 +208,7 @@ export function listPhotoLeaderboard(): LeaderboardEntry[] {
         id: row.id,
         personName: row.person_name,
         drinkName: row.drink_name,
+        createdAt: row.created_at,
         thumbUrl: localThumb ?? thumbUrl(row.id),
         voteCount,
         skipCount,
@@ -375,14 +381,6 @@ export function photoImageKey(
   };
 }
 
-async function deleteQuietly(storage: PhotoStorage, key: string): Promise<void> {
-  try {
-    await storage.delete(key);
-  } catch {
-    // The object may already be gone.
-  }
-}
-
 export async function createUpload(input: {
   contentType: string;
   contentLength: number;
@@ -422,12 +420,6 @@ function loadUpload(uploadId: string): UploadRow | undefined {
   return getDb().prepare("SELECT * FROM photo_uploads WHERE id = ?").get(uploadId) as UploadRow | undefined;
 }
 
-function markConsumed(uploadId: string): void {
-  getDb()
-    .prepare("UPDATE photo_uploads SET consumed_at = ? WHERE id = ?")
-    .run(new Date().toISOString(), uploadId);
-}
-
 function contactInUse(fields: FieldErrors): {
   ok: false;
   code: string;
@@ -458,7 +450,7 @@ function takenContactFields(
   return fields;
 }
 
-/** Looks up the email and phone before any photo bytes are accepted. */
+/** Looks up the email and phone before a contest entry is created. */
 export function checkPhotoContact(input: {
   email?: unknown;
   phone?: unknown;
@@ -523,60 +515,45 @@ export async function submitPhoto(input: {
     return { ok: false, code: "UPLOAD_USED", message: "That upload was already used. Choose the photo again." };
   }
 
+  if (upload.prepare_status === "discarded") {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+
   const createdAt = new Date(upload.created_at).getTime();
   if (!Number.isFinite(createdAt) || Date.now() - createdAt > UPLOAD_TTL_MS) {
-    markConsumed(upload.id);
-    await deleteQuietly(storage, upload.object_key);
+    await discardUpload(upload.id);
     return { ok: false, code: "UPLOAD_EXPIRED", message: "That upload expired. Choose the photo again." };
   }
 
-  const head = await storage.head(upload.object_key);
-  if (!head) {
-    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That photo didn't arrive. Choose it and try again." };
-  }
-  if (head.contentLength !== upload.content_length || head.contentLength < 1) {
-    markConsumed(upload.id);
-    await deleteQuietly(storage, upload.object_key);
-    return { ok: false, code: "NOT_AN_IMAGE", message: "That photo didn't match the file you chose." };
+  const taken = takenContactFields(getDb(), parsed.value.email, parsed.value.phone);
+  if (taken.email || taken.phone) {
+    await discardUpload(upload.id);
+    return contactInUse(taken);
   }
 
-  const original = await storage.get(upload.object_key);
-  if (!original || original.length !== upload.content_length) {
-    markConsumed(upload.id);
-    if (original) await deleteQuietly(storage, upload.object_key);
-    return { ok: false, code: "NOT_AN_IMAGE", message: "That photo didn't match the file you chose." };
-  }
+  const prepared = await prepareUpload(upload.id);
+  if (!prepared.ok) return prepared;
 
-  const kind = detectImageType(original);
-  if (!kind || !contentTypeMatches(upload.content_type, kind)) {
-    markConsumed(upload.id);
-    await deleteQuietly(storage, upload.object_key);
-    return { ok: false, code: "NOT_AN_IMAGE", message: "That file isn't a JPEG, PNG, WebP, or HEIC photo." };
+  const ready = loadUpload(upload.id);
+  const voteKey = ready?.vote_key || voteKeyForUpload(upload.id);
+  const thumbKey = ready?.thumb_key || thumbKeyForUpload(upload.id);
+  if (!ready || ready.prepare_status !== "ready" || ready.consumed_at) {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
   }
-
-  const images = await withResizeSlot(() => makeBoardImages(original));
-  if ("error" in images) {
-    markConsumed(upload.id);
-    await deleteQuietly(storage, upload.object_key);
-    return { ok: false, code: "NOT_AN_IMAGE", message: images.error };
+  const voteReady = await storage.head(voteKey);
+  const thumbReady = await storage.head(thumbKey);
+  if (!voteReady || !thumbReady) {
+    return { ok: false, code: "NOT_AN_IMAGE", message: "That photo didn't arrive. Choose it and try again." };
   }
 
   const photoId = crypto.randomUUID();
-  const voteKey = `board/${crypto.randomUUID()}-vote.webp`;
-  const thumbKey = `board/${crypto.randomUUID()}-thumb.webp`;
-  await storage.put(voteKey, images.vote, "image/webp");
-  await storage.put(thumbKey, images.thumb, "image/webp");
-
   const db = beginImmediate();
   try {
-    const taken = takenContactFields(db, parsed.value.email, parsed.value.phone);
-    if (taken.email || taken.phone) {
+    const raced = takenContactFields(db, parsed.value.email, parsed.value.phone);
+    if (raced.email || raced.phone) {
       db.exec("ROLLBACK");
-      await deleteQuietly(storage, voteKey);
-      await deleteQuietly(storage, thumbKey);
-      await deleteQuietly(storage, upload.object_key);
-      markConsumed(upload.id);
-      return contactInUse(taken);
+      await discardUpload(upload.id);
+      return contactInUse(raced);
     }
 
     const now = new Date().toISOString();
@@ -606,11 +583,8 @@ export async function submitPhoto(input: {
     db.exec("COMMIT");
   } catch (error) {
     rollbackQuietly();
-    await deleteQuietly(storage, voteKey);
-    await deleteQuietly(storage, thumbKey);
     if (isUniqueConstraint(error)) {
-      await deleteQuietly(storage, upload.object_key);
-      markConsumed(upload.id);
+      await discardUpload(upload.id);
       const detail = error instanceof Error ? error.message.toLowerCase() : "";
       const fields: FieldErrors = {};
       if (detail.includes("phone")) fields.phone = PHONE_ALREADY_ENTERED;

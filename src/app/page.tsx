@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { PhotoDeck } from "@/components/photo-deck";
 
 export const metadata: Metadata = {
-  title: "Show us your cup",
-  description: "Your drink moment. Snap it, name it, and Barrie votes.",
+  title: "Sip. Snap. Swipe.",
+  description: "Swiping that won't get you in trouble.",
 };
 
 export default function HomePage() {

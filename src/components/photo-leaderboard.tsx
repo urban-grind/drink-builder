@@ -6,8 +6,61 @@ import { ApiRequestError, requestJson } from "@/lib/client-api";
 import type { LeaderboardEntry } from "@/lib/photo-types";
 
 function likeLabel(percent: number | null): string {
-  if (percent === null) return "No votes yet";
+  if (percent === null) return "No likes yet";
   return `${percent}% liked`;
+}
+
+function shortDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+}
+
+function HeartMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-3.5 w-3.5" fill="currentColor">
+      <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
+    </svg>
+  );
+}
+
+function PickCard({
+  photo,
+  rank,
+  yours,
+  prominent,
+}: {
+  photo: LeaderboardEntry;
+  rank: number;
+  yours: boolean;
+  prominent: boolean;
+}) {
+  const date = shortDate(photo.createdAt);
+  const name = photo.personName.trim();
+  return (
+    <article className={prominent ? "col-span-2 md:col-span-1" : ""}>
+      <div className={`relative overflow-hidden rounded-2xl bg-[#e7e4de] ${prominent ? "aspect-[4/5] md:aspect-[3/4]" : "aspect-[3/4]"}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.thumbUrl} alt="" className="h-full w-full object-cover" />
+        <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f2ef] text-sm font-semibold text-[#274b3a]">
+          {rank}
+        </span>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-2.5 pt-8 pb-2 text-white">
+          <p className="flex items-center gap-1 text-[12px] font-medium">
+            <HeartMark />
+            <span>{photo.voteCount}</span>
+          </p>
+          <p className="text-[11px] font-normal text-white/90">{likeLabel(photo.likePercent)}</p>
+        </div>
+      </div>
+      <p className="mt-1.5 text-[13px] leading-tight font-medium">
+        {name}
+        {date ? ` · ${date}` : ""}
+      </p>
+      <p className="text-[12px] leading-tight text-[#274b3a]/75">{photo.drinkName}</p>
+      {yours ? <p className="text-xs font-semibold text-[#274b3a]">Your photo</p> : null}
+    </article>
+  );
 }
 
 export function PhotoLeaderboard({ mine, revision }: { mine: string[]; revision: number }) {
@@ -30,63 +83,55 @@ export function PhotoLeaderboard({ mine, revision }: { mine: string[]; revision:
       .catch((caught) => {
         if (controller.signal.aborted) return;
         setStatus("error");
-        setError(caught instanceof ApiRequestError ? caught.message : "The leaderboard didn't load.");
+        setError(caught instanceof ApiRequestError ? caught.message : "The top picks didn't load.");
       });
     return () => controller.abort();
   }, [reloadKey, revision]);
 
   return (
-    <div className="pt-4">
-      <h2 id="photo-leaderboard-heading" className="font-heading text-3xl leading-none">
-        Leaderboard
-      </h2>
-      <p className="mt-2 text-sm">Ranked by votes. A tie goes to the higher like percentage.</p>
+    <div className="pt-1">
+      <h1 className="text-center font-heading text-[1.85rem] leading-none tracking-wide uppercase">Top picks.</h1>
+      <p className="mt-2 text-center text-sm text-[#274b3a]/75">Your favourites, ranked.</p>
 
       {status === "loading" ? (
-        <div role="status" className="mt-4 space-y-3">
-          <p className="sr-only">Loading the leaderboard</p>
-          <div className="h-20 animate-pulse rounded-2xl bg-[#e7e4de]" />
-          <div className="h-20 animate-pulse rounded-2xl bg-[#e7e4de]" />
-          <div className="h-20 animate-pulse rounded-2xl bg-[#e7e4de]" />
+        <div role="status" className="mt-4">
+          <p className="sr-only">Loading top picks</p>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5">
+            <div className="col-span-2 aspect-[4/5] animate-pulse rounded-2xl bg-[#e7e4de] md:col-span-1 md:aspect-[3/4]" />
+            <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
+            <div className="hidden aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de] md:block" />
+          </div>
         </div>
       ) : null}
 
       {status === "error" ? (
         <div role="alert" className="py-6 text-center">
           <p>{error}</p>
-          <Button type="button" className="mt-4 h-12 rounded-full px-6" onClick={() => setReloadKey((value) => value + 1)}>
+          <Button type="button" className="mt-4 h-12 rounded-full bg-[#274b3a] px-6 text-[#f3f2ef]" onClick={() => setReloadKey((value) => value + 1)}>
             Try again
           </Button>
         </div>
       ) : null}
 
       {status === "ready" && photos.length === 0 ? (
-        <p className="py-6 text-center text-lg">No photos on the board yet.</p>
+        <p className="py-8 text-center text-base">No photos on the board yet.</p>
       ) : null}
 
       {status === "ready" && photos.length > 0 ? (
-        <ol className="mt-4 flex flex-col gap-3">
-          {photos.map((photo, index) => {
-            const yours = mineIds.has(photo.id);
-            return (
-              <li key={photo.id} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm">
-                <span className="w-6 shrink-0 text-center text-sm font-bold">{index + 1}</span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.thumbUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold">{photo.personName.trim()}</p>
-                  {yours ? <p className="text-xs font-bold tracking-wide text-[#274b3a]">Your photo</p> : null}
-                  <p className="truncate text-sm text-[#274b3a]/70">{photo.drinkName}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="font-heading text-2xl leading-none">{photo.voteCount}</p>
-                  <p className="text-xs font-bold">{photo.voteCount === 1 ? "vote" : "votes"}</p>
-                  <p className="mt-1 text-sm font-bold">{likeLabel(photo.likePercent)}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+        <div className="mt-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-3 md:gap-5">
+            {photos.slice(0, 3).map((photo, index) => (
+              <PickCard key={photo.id} photo={photo} rank={index + 1} prominent={index === 0} yours={mineIds.has(photo.id)} />
+            ))}
+          </div>
+          {photos.length > 3 ? (
+            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 md:mt-8 md:grid-cols-4 md:gap-4">
+              {photos.slice(3).map((photo, index) => (
+                <PickCard key={photo.id} photo={photo} rank={index + 4} prominent={false} yours={mineIds.has(photo.id)} />
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

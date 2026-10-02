@@ -38,7 +38,7 @@ export function UploadDialogProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("upload") === "1") setOpen(true);
+    if (params.get("upload") === "1" && window.location.pathname !== "/") setOpen(true);
   }, []);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export function UploadDialogProvider({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="px-5 py-5 sm:px-6 sm:pb-6">
-              <PhotoEntryForm key={session} presentation="dialog" onFinished={() => setOpen(false)} />
+              <PhotoEntryForm key={session} presentation="dialog" active={open} onFinished={() => setOpen(false)} />
             </div>
           </div>
         </div>

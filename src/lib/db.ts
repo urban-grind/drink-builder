@@ -113,7 +113,12 @@ function ensurePhotoTables(db: DatabaseSync): void {
       content_type TEXT NOT NULL,
       content_length INTEGER NOT NULL,
       created_at TEXT NOT NULL,
-      consumed_at TEXT
+      consumed_at TEXT,
+      vote_key TEXT,
+      thumb_key TEXT,
+      prepare_status TEXT,
+      prepare_error TEXT,
+      prepare_generation INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS photo_entries (
       id TEXT PRIMARY KEY,
@@ -159,6 +164,7 @@ function ensurePhotoTables(db: DatabaseSync): void {
     db.exec("ALTER TABLE photo_entries ADD COLUMN public_code TEXT");
   }
   ensurePhotoContacts(db);
+  ensureUploadPrepareColumns(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_photo_entries_status ON photo_entries (status, created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_public_code ON photo_entries (public_code);
@@ -167,6 +173,18 @@ function ensurePhotoTables(db: DatabaseSync): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_phone
       ON photo_entries (phone) WHERE phone IS NOT NULL;
   `);
+}
+
+function ensureUploadPrepareColumns(db: DatabaseSync): void {
+  const columns = db.prepare("PRAGMA table_info(photo_uploads)").all() as { name: string }[];
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("vote_key")) db.exec("ALTER TABLE photo_uploads ADD COLUMN vote_key TEXT");
+  if (!names.has("thumb_key")) db.exec("ALTER TABLE photo_uploads ADD COLUMN thumb_key TEXT");
+  if (!names.has("prepare_status")) db.exec("ALTER TABLE photo_uploads ADD COLUMN prepare_status TEXT");
+  if (!names.has("prepare_error")) db.exec("ALTER TABLE photo_uploads ADD COLUMN prepare_error TEXT");
+  if (!names.has("prepare_generation")) {
+    db.exec("ALTER TABLE photo_uploads ADD COLUMN prepare_generation INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 /**
