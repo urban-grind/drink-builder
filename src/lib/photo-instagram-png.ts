@@ -6,7 +6,7 @@ const GREEN = "#274b3a";
 const CREAM = "#f7f4ec";
 const WHITE = "#ffffff";
 
-const HEADLINE = "VOTE FOR MY PHOTO";
+const HEADLINE_LINES = ["VOTE FOR", "MY PHOTO."];
 const SUBHEAD_BEFORE = "Help me win ";
 const SUBHEAD_BOLD = "free coffee";
 const SUBHEAD_AFTER = " for a month.";
@@ -31,7 +31,6 @@ const canvases: Record<
     footerY: number;
     footer: string;
     pillSize: number;
-    pillInset: number;
   }
 > = {
   square: {
@@ -41,17 +40,16 @@ const canvases: Record<
     headerTop: 52,
     wordSize: 44,
     kickerSize: 20,
-    headlineSize: 92,
-    headlineY: 248,
+    headlineSize: 120,
+    headlineY: 176,
     subheadSize: 32,
-    photoTop: 390,
+    photoTop: 412,
     photoBottom: 948,
     radius: 48,
     footerSize: 32,
     footerY: 1014,
     footer: "Urban Grind Photo Contest",
     pillSize: 28,
-    pillInset: 28,
   },
   story: {
     width: 1080,
@@ -60,17 +58,16 @@ const canvases: Record<
     headerTop: 148,
     wordSize: 48,
     kickerSize: 22,
-    headlineSize: 100,
-    headlineY: 430,
+    headlineSize: 132,
+    headlineY: 400,
     subheadSize: 38,
-    photoTop: 640,
+    photoTop: 720,
     photoBottom: 1408,
     radius: 56,
     footerSize: 36,
     footerY: 1504,
     footer: "Tap my link to vote.",
-    pillSize: 30,
-    pillInset: 36,
+    pillSize: 32,
   },
 };
 
@@ -124,16 +121,6 @@ function drawCover(
   ctx.restore();
 }
 
-function fitSize(ctx: CanvasRenderingContext2D, text: string, font: string, size: number, maxWidth: number, min: number): number {
-  let next = size;
-  ctx.font = font.replace("SIZE", String(next));
-  while (next > min && ctx.measureText(text).width > maxWidth) {
-    next -= 2;
-    ctx.font = font.replace("SIZE", String(next));
-  }
-  return next;
-}
-
 function drawSubhead(
   ctx: CanvasRenderingContext2D,
   body: string,
@@ -166,26 +153,36 @@ function drawSubhead(
   ctx.fillText(SUBHEAD_AFTER, x, y);
 }
 
-function drawPill(ctx: CanvasRenderingContext2D, body: string, label: string, x: number, y: number, size: number, maxWidth: number) {
+function drawPill(
+  ctx: CanvasRenderingContext2D,
+  body: string,
+  label: string,
+  centerX: number,
+  centerY: number,
+  size: number,
+  maxWidth: number,
+) {
   let next = size;
   ctx.font = `700 ${next}px ${body}`;
-  while (next > 16 && ctx.measureText(label).width + next > maxWidth) {
+  while (next > 16 && ctx.measureText(label).width + next * 1.6 > maxWidth) {
     next -= 1;
     ctx.font = `700 ${next}px ${body}`;
   }
   const textWidth = ctx.measureText(label).width;
-  const padX = next * 0.72;
-  const padY = next * 0.42;
+  const padX = next * 0.85;
+  const padY = next * 0.48;
   const width = textWidth + padX * 2;
   const height = next + padY * 2;
+  const x = centerX - width / 2;
+  const y = centerY - height / 2;
   ctx.fillStyle = WHITE;
   roundRect(ctx, x, y, width, height, height / 2);
   ctx.fill();
   ctx.fillStyle = GREEN;
-  ctx.textAlign = "left";
+  ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `700 ${next}px ${body}`;
-  ctx.fillText(label, x + padX, y + height / 2 + next * 0.04);
+  ctx.fillText(label, centerX, centerY + next * 0.04);
 }
 
 /**
@@ -219,38 +216,49 @@ export async function renderPhotoInstagramPng(
 
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  ctx.letterSpacing = `${layout.wordSize * 0.12}px`;
+  ctx.letterSpacing = `${layout.wordSize * 0.06}px`;
   ctx.font = `600 ${layout.wordSize}px ${heading}`;
   ctx.fillText("URBAN", layout.padX, layout.headerTop);
-  const wordGap = layout.wordSize * 0.96;
+  const wordGap = layout.wordSize * 0.9;
   ctx.fillText("GRIND", layout.padX, layout.headerTop + wordGap);
-  const wordBlock = wordGap + layout.wordSize * 0.78;
+  const serifBlock = wordGap + layout.wordSize * 0.72;
+  const coffeeSize = Math.round(layout.wordSize * 0.4);
+  ctx.letterSpacing = `${coffeeSize * 0.34}px`;
+  ctx.font = `700 ${coffeeSize}px ${body}`;
+  ctx.fillText("COFFEE CO.", layout.padX, layout.headerTop + serifBlock + coffeeSize * 0.35);
 
   ctx.letterSpacing = `${layout.kickerSize * 0.28}px`;
   ctx.font = `700 ${layout.kickerSize}px ${body}`;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  ctx.fillText(KICKER, layout.width - layout.padX, layout.headerTop + wordBlock / 2);
+  ctx.fillText(KICKER, layout.width - layout.padX, layout.headerTop + serifBlock / 2);
   ctx.letterSpacing = "0px";
-  ctx.textAlign = "center";
 
-  const headlineSize = fitSize(
-    ctx,
-    HEADLINE,
-    `600 SIZE px ${heading}`,
-    layout.headlineSize,
-    layout.width - layout.padX * 2,
-    48,
-  );
+  let headlineSize = layout.headlineSize;
+  const headlineMax = layout.width - layout.padX * 2;
+  while (headlineSize > 72) {
+    ctx.font = `600 ${headlineSize}px ${heading}`;
+    ctx.letterSpacing = `${headlineSize * 0.025}px`;
+    const widest = Math.max(...HEADLINE_LINES.map((line) => ctx.measureText(line).width));
+    if (widest <= headlineMax) break;
+    headlineSize -= 2;
+  }
   ctx.font = `600 ${headlineSize}px ${heading}`;
+  ctx.letterSpacing = `${headlineSize * 0.025}px`;
+  ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(HEADLINE, layout.width / 2, layout.headlineY);
+  ctx.fillStyle = GREEN;
+  const lineGap = headlineSize * 0.92;
+  HEADLINE_LINES.forEach((line, index) => {
+    ctx.fillText(line, layout.width / 2, layout.headlineY + index * lineGap);
+  });
+  ctx.letterSpacing = "0px";
   drawSubhead(
     ctx,
     body,
     layout.subheadSize,
-    layout.headlineY + headlineSize * 0.7 + layout.subheadSize * 0.55,
-    layout.width - layout.padX * 2,
+    layout.headlineY + lineGap + headlineSize * 0.62 + layout.subheadSize * 0.7,
+    headlineMax,
     layout.width,
   );
 
@@ -264,10 +272,10 @@ export async function renderPhotoInstagramPng(
     ctx,
     body,
     entryLabel(photo.personName),
-    photoX + layout.pillInset,
-    photoY + layout.pillInset,
+    photoX + photoWidth / 2,
+    photoY + photoHeight,
     layout.pillSize,
-    photoWidth - layout.pillInset * 2,
+    photoWidth * 0.8,
   );
 
   ctx.fillStyle = GREEN;
