@@ -1,4 +1,5 @@
 import { instagramFileName, type InstagramSize } from "@/lib/instagram-png";
+import { deliverPng } from "@/lib/share-png";
 
 const GREEN = "#274b3a";
 const CREAM = "#f3f2ef";
@@ -103,15 +104,11 @@ export async function renderPhotoInstagramPng(
   return blob;
 }
 
-export async function downloadPhotoInstagramPng(
+export async function savePhotoInstagramPng(
   photo: { drinkName: string; photoUrl: string },
   size: InstagramSize,
+  share: boolean,
 ): Promise<void> {
   const blob = await renderPhotoInstagramPng(photo, size);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = instagramFileName(photo.drinkName, size);
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  await deliverPng(blob, instagramFileName(photo.drinkName, size), share);
 }

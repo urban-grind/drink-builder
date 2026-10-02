@@ -1,3 +1,5 @@
+import { deliverPng } from "@/lib/share-png";
+
 /** One deep-green poster. The saved cup is a cutout; the drink name is the only large type. */
 export type InstagramSize = "story" | "square";
 
@@ -183,15 +185,11 @@ export async function renderInstagramPng(
   return blob;
 }
 
-export async function downloadInstagramPng(
+export async function saveInstagramPng(
   drink: { name: string; photoUrl: string },
   size: InstagramSize,
+  share: boolean,
 ): Promise<void> {
   const blob = await renderInstagramPng(drink, size);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = instagramFileName(drink.name, size);
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  await deliverPng(blob, instagramFileName(drink.name, size), share);
 }
