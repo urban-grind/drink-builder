@@ -115,6 +115,11 @@ function sampleVisibilitySql(): string {
   return "(? = 1 OR e.original_key NOT LIKE 'local-sample/%')";
 }
 
+/** A short link works while the cafe is still reviewing. Rejected and removed photos do not. */
+function linkedPhotoSql(): string {
+  return "e.status IN ('pending', 'approved')";
+}
+
 function sampleVisibilityFlag(): number {
   return samplePhotosEnabled() ? 1 : 0;
 }
@@ -140,7 +145,7 @@ export function listPhotoBoard(voterId: string | null): { popular: PublicPhoto[]
 export function getPublicPhoto(id: string, voterId: string | null): PublicPhoto | null {
   ensureSamplePhotos();
   const row = getDb()
-    .prepare(`${selectEntry} WHERE e.id = ? AND e.status = 'approved' AND ${sampleVisibilitySql()}`)
+    .prepare(`${selectEntry} WHERE e.id = ? AND ${linkedPhotoSql()} AND ${sampleVisibilitySql()}`)
     .get(voterId ?? "", id, sampleVisibilityFlag()) as EntryRow | undefined;
   return row ? toPublic(row) : null;
 }
@@ -167,7 +172,7 @@ export const LEADERBOARD_LIMIT = 20;
 /** How many cards a phone asks for at once. */
 export const DECK_PAGE_SIZE = 5;
 
-/** Approved photos, ranked for the leaderboard. Samples stay off in production. */
+/** Top picks. Pending, rejected, and removed photos stay off this list. Samples stay off in production. */
 export function listPhotoLeaderboard(): LeaderboardEntry[] {
   ensureSamplePhotos();
   const rows = getDb()
@@ -220,6 +225,7 @@ export function listPhotoLeaderboard(): LeaderboardEntry[] {
 
 /**
  * The next few approved photos this voter has not voted on or skipped.
+ * Pending uploads stay off the deck until the cafe approves them.
  * `except` is the small stack already on the phone, so those images are not sent again.
  */
 export function listPhotoDeck(
@@ -339,7 +345,7 @@ export function getPublicPhotoByCode(code: string, voterId: string | null): Publ
   if (!isPhotoCode(code)) return null;
   ensureSamplePhotos();
   const row = getDb()
-    .prepare(`${selectEntry} WHERE e.public_code = ? AND e.status = 'approved' AND ${sampleVisibilitySql()}`)
+    .prepare(`${selectEntry} WHERE e.public_code = ? AND ${linkedPhotoSql()} AND ${sampleVisibilitySql()}`)
     .get(voterId ?? "", code, sampleVisibilityFlag()) as EntryRow | undefined;
   return row ? toPublic(row) : null;
 }
@@ -371,7 +377,8 @@ export function photoImageKey(
     .prepare("SELECT status, vote_key, thumb_key FROM photo_entries WHERE id = ?")
     .get(id) as { status: PhotoStatus; vote_key: string; thumb_key: string } | undefined;
   if (!row) return null;
-  if (row.status !== "approved" && !reviewer) return null;
+  const onAPublicLink = row.status === "pending" || row.status === "approved";
+  if (!onAPublicLink && !reviewer) return null;
   if ((row.vote_key.startsWith("local-sample/") || row.thumb_key.startsWith("local-sample/")) && !samplePhotosEnabled()) {
     return null;
   }
@@ -616,7 +623,7 @@ export function castPhotoVote(
   const db = beginImmediate();
   try {
     const photo = db
-      .prepare("SELECT 1 AS found FROM photo_entries WHERE id = ? AND status = 'approved'")
+      .prepare("SELECT 1 AS found FROM photo_entries WHERE id = ? AND status IN ('pending', 'approved')")
       .get(photoId);
     if (!photo) {
       db.exec("ROLLBACK");

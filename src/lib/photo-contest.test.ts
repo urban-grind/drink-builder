@@ -14,6 +14,8 @@ import {
   castPhotoVote,
   createUpload,
   getPublicPhoto,
+  getPublicPhotoByCode,
+  photoImageKey,
   compareLeaderboard,
   listPhotoBoard,
   listPhotoDeck,
@@ -368,7 +370,17 @@ describe("photo contest", { concurrency: false }, () => {
 
     const board = listPhotoBoard(null);
     assert.equal(board.popular.length, 0);
-    assert.equal(getPublicPhoto(saved.id, null), null);
+    const pendingLink = getPublicPhotoByCode(saved.code, null);
+    assert.equal(pendingLink?.drinkName, "Window light");
+    assert.equal(pendingLink?.personName, "Ada");
+    assert.equal(getPublicPhoto(saved.id, null)?.id, saved.id);
+    assert.equal(listPhotoDeck("deck-voter").some((photo) => photo.id === saved.id), false);
+    assert.equal(listPhotoLeaderboard().some((photo) => photo.id === saved.id), false);
+    assert.equal(swipeDeckPhoto(saved.id, "deck-voter", "vote").ok, false);
+    assert.ok(photoImageKey(saved.id, "vote", false));
+    const pendingVote = castPhotoVote(saved.id, crypto.randomUUID());
+    assert.equal(pendingVote.ok, true);
+    if (pendingVote.ok) assert.equal(pendingVote.photo.voteCount, 1);
 
     const review = listReviewPhotos();
     assert.equal(review.length, 1);
@@ -413,7 +425,7 @@ describe("photo contest", { concurrency: false }, () => {
     const firstVote = castPhotoVote(saved.id, voter);
     assert.equal(firstVote.ok, true);
     if (firstVote.ok) {
-      assert.equal(firstVote.photo.voteCount, 1);
+      assert.equal(firstVote.photo.voteCount, 2);
       assert.equal(firstVote.photo.voted, true);
       assert.equal("email" in firstVote.photo, false);
     }
@@ -469,7 +481,9 @@ describe("photo contest", { concurrency: false }, () => {
       assert.equal(held.ok, true);
       if (!held.ok) return;
       assert.equal(held.status, "pending");
-      assert.equal(getPublicPhoto(held.id, null), null);
+      assert.equal(getPublicPhotoByCode(held.code, null)?.drinkName, "Cortado");
+      assert.equal(listPhotoDeck("held-deck").some((photo) => photo.id === held.id), false);
+      assert.equal(listPhotoLeaderboard().some((photo) => photo.id === held.id), false);
 
       process.env.PHOTO_SKIP_REVIEW = "true";
       const live = await enter("live@example.com");
@@ -487,7 +501,13 @@ describe("photo contest", { concurrency: false }, () => {
       assert.equal(locked.ok, true);
       if (!locked.ok) return;
       assert.equal(locked.status, "pending");
-      assert.equal(getPublicPhoto(locked.id, null), null);
+      assert.equal(getPublicPhoto(locked.id, null)?.id, locked.id);
+      assert.equal(listPhotoBoard(null).popular.some((photo) => photo.id === locked.id), false);
+      assert.equal(listPhotoDeck("locked-deck").some((photo) => photo.id === locked.id), false);
+      assert.equal(moderatePhoto(locked.id, "reject").ok, true);
+      assert.equal(getPublicPhotoByCode(locked.code, null), null);
+      assert.equal(photoImageKey(locked.id, "vote", false), null);
+      assert.equal(castPhotoVote(locked.id, crypto.randomUUID()).ok, false);
     } finally {
       delete process.env.PHOTO_SKIP_REVIEW;
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
