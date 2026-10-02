@@ -8,10 +8,12 @@ import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
 import { phoneSharesPng } from "@/lib/share-png";
 
 export function PhotoShare({
+  personName,
   drinkName,
   photoUrl,
   entryPath,
 }: {
+  personName: string;
   drinkName: string;
   photoUrl: string;
   entryPath: string;
@@ -44,7 +46,7 @@ export function PhotoShare({
     setPending(size);
     setError(null);
     try {
-      await savePhotoInstagramPng({ drinkName, photoUrl }, size, share);
+      await savePhotoInstagramPng({ personName, drinkName, photoUrl }, size, share);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : share ? "The picture didn't share." : "The picture didn't save.");
     } finally {

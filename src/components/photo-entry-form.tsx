@@ -222,6 +222,7 @@ export function PhotoEntryForm({
         </p>
         <div className="mt-6">
           <PhotoShare
+            personName={personName}
             drinkName={drink}
             photoUrl={preview ?? ""}
             entryPath={photoEntryPath(savedId)}

@@ -101,7 +101,12 @@ export function PhotoDetail({ code }: { code: string }) {
           </p>
           <PhotoVoteButton photo={photo} onUpdated={setPhoto} />
         </div>
-        <PhotoShare drinkName={photo.drinkName} photoUrl={photo.imageUrl} entryPath={photoEntryPath(photo.code)} />
+        <PhotoShare
+          personName={photo.personName}
+          drinkName={photo.drinkName}
+          photoUrl={photo.imageUrl}
+          entryPath={photoEntryPath(photo.code)}
+        />
         <time dateTime={photo.createdAt} className="text-sm">
           {formatWhen(photo.createdAt)}
         </time>
