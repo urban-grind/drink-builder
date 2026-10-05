@@ -141,7 +141,7 @@ export function PhotoEntryView({
     mode === "owner"
       ? live
         ? voteCount === 0
-          ? "Share it to get your first votes."
+          ? "Send it to get your first vote."
           : "Share it to get more votes."
         : "Waiting for approval. You can still share it."
       : `Help ${name} win free coffee for a month.`;
@@ -185,6 +185,24 @@ export function PhotoEntryView({
             </div>
           </div>
         ) : mode === "visitor" ? (
+          <>
+          <div className="absolute inset-x-3 top-3 hidden md:block">
+            <button
+              type="button"
+              className={greenButton}
+              disabled={!onVote || votePending || voted}
+              aria-pressed={voted}
+              onClick={onVote}
+            >
+              <Heart />
+              {votePending ? "Saving…" : voted ? "Voted" : "Vote for this photo"}
+            </button>
+            {voteError ? (
+              <p role="alert" className="mt-2 text-center text-sm font-semibold text-white">
+                {voteError}
+              </p>
+            ) : null}
+          </div>
           <div className="absolute inset-x-3 bottom-3 flex flex-col gap-2 md:hidden">
             <button
               type="button"
@@ -214,6 +232,7 @@ export function PhotoEntryView({
               </button>
             </div>
           </div>
+          </>
         ) : null}
       </div>
       <div className="mt-3 shrink-0 rounded-2xl bg-white px-4 py-3 shadow-[0_10px_28px_rgb(39_75_58/0.06)]">
@@ -243,21 +262,6 @@ export function PhotoEntryView({
         </div>
       ) : (
         <div className="mt-4 hidden shrink-0 flex-col gap-2.5 md:flex">
-          <button
-            type="button"
-            className={greenButton}
-            disabled={!onVote || votePending || voted}
-            aria-pressed={voted}
-            onClick={onVote}
-          >
-            <Heart />
-            {votePending ? "Saving…" : voted ? "Voted" : "Vote for this photo"}
-          </button>
-          {voteError ? (
-            <p role="alert" className="text-center text-sm text-[#8b2e2e]">
-              {voteError}
-            </p>
-          ) : null}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" className={outlineButton} onClick={() => void shareLink()}>
               <ShareArrow />

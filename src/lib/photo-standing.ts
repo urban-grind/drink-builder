@@ -15,7 +15,7 @@ export function ownerStandingBanner(input: {
   votesFromTopTwo: number | null;
 }): string {
   if (!input.live) return "Waiting for approval. You can still share your link.";
-  if (input.voteCount === 0 || input.rank == null) return "Share your link to get your first vote.";
+  if (input.voteCount === 0 || input.rank == null) return "This is your personalized voting link.";
   if (input.rank <= 2) return "In the top two";
   if (input.votesFromTopTwo != null) {
     const gap = input.votesFromTopTwo;

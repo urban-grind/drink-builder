@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PhotoDetail } from "@/components/photo-detail";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { firstName } from "@/lib/first-name";
 import type { LeaderboardEntry, PublicPhoto } from "@/lib/photo-types";
 
 const PAGE_SIZE = 4;
@@ -13,27 +14,20 @@ type LeaderboardPage = {
   hasMore: boolean;
 };
 
-function likeLabel(percent: number | null): string {
-  if (percent === null) return "No likes yet";
-  return `${percent}% liked`;
-}
-
-function shortDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
-}
-
 function pagePath(offset: number): string {
   const params = new URLSearchParams({ offset: String(offset), limit: String(PAGE_SIZE) });
   return `/api/photos/leaderboard?${params.toString()}`;
 }
 
-const PRIZE_RANKS = 2;
+const LEADING_RANKS = 2;
+
+function voteLabel(count: number): string {
+  return `${count} ${count === 1 ? "vote" : "votes"}`;
+}
 
 function HeartMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="currentColor">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 text-[#274b3a]" fill="currentColor">
       <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
     </svg>
   );
@@ -50,52 +44,54 @@ function PickCard({
   yours: boolean;
   onOpen: (code: string) => void;
 }) {
-  const date = shortDate(photo.createdAt);
-  const name = photo.personName.trim();
-  const prize = rank <= PRIZE_RANKS;
-  const place = prize ? "Free coffee for a month" : `Rank ${rank}`;
+  const name = firstName(photo.personName);
+  const drink = photo.drinkName.trim();
+  const leading = rank <= LEADING_RANKS && photo.voteCount > 0;
+  const place = rank === 1 ? "Number one" : rank === 2 ? "Number two" : `Rank ${rank}`;
+  const label = [yours ? "Your photo" : null, place, leading ? "currently leading" : null, name, drink || null, voteLabel(photo.voteCount)]
+    .filter(Boolean)
+    .join(", ");
   return (
     <button
       type="button"
       onClick={() => onOpen(photo.code)}
       disabled={!photo.code}
-      aria-label={yours ? `Your photo, ${place}, ${photo.drinkName}` : `${place}, ${photo.drinkName}`}
+      aria-label={label}
       className="cursor-pointer border-0 bg-transparent p-0 text-left text-[#274b3a]"
     >
       <div
-        className={`relative aspect-[3/4] overflow-hidden rounded-2xl bg-[#e7e4de] ${yours ? "outline outline-[3px] outline-offset-2 outline-[#274b3a]" : ""}`}
+        className={`overflow-hidden rounded-[1.15rem] bg-[#fbfaf7] shadow-[0_8px_18px_rgb(39_75_58/0.08)] ring-1 ring-[#274b3a]/10 ${yours ? "outline outline-[3px] outline-offset-2 outline-[#274b3a]" : ""}`}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.thumbUrl}
-          alt=""
-          loading={rank <= PAGE_SIZE ? "eager" : "lazy"}
-          decoding="async"
-          className="h-full w-full object-cover"
-        />
-        {prize ? (
-          <span className="absolute inset-x-2 top-2 rounded-full bg-[#274b3a] px-2 py-1.5 text-center text-[10px] leading-tight font-bold tracking-[0.08em] text-[#f3f2ef] uppercase">
-            Free coffee for a month
-          </span>
-        ) : (
-          <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f2ef] text-sm font-semibold text-[#274b3a]">
+        <div className="relative aspect-square bg-[#e7e4de]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photo.thumbUrl}
+            alt=""
+            loading={rank <= PAGE_SIZE ? "eager" : "lazy"}
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
+          <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f6f1e8] text-sm font-semibold text-[#274b3a] shadow-sm">
             {rank}
           </span>
-        )}
-        <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2 rounded-full bg-[#f3f2ef]/95 px-2.5 py-1.5 text-[#274b3a] shadow-[0_6px_16px_rgb(0_0_0/0.18)]">
-          <p className="flex items-center gap-1 text-sm font-bold">
+          {leading ? (
+            <span className="absolute top-2 right-2 rounded-full bg-[#274b3a] px-2 py-1 text-[10px] leading-none font-semibold text-[#f3f2ef]">
+              Currently leading
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-2 px-2.5 py-2.5">
+          <div className="min-w-0">
+            <p className="truncate text-[15px] leading-tight font-semibold text-[#274b3a]">{name}</p>
+            {drink ? <p className="truncate text-xs leading-tight text-[#274b3a]">{drink}</p> : null}
+            {yours ? <p className="text-xs font-semibold">Your photo</p> : null}
+          </div>
+          <p className="flex shrink-0 items-center gap-1 text-xs font-semibold">
             <HeartMark />
-            <span>{photo.voteCount}</span>
+            {voteLabel(photo.voteCount)}
           </p>
-          <p className="text-xs font-semibold">{likeLabel(photo.likePercent)}</p>
         </div>
       </div>
-      <p className="mt-1.5 text-[13px] leading-tight font-medium">
-        {name}
-        {date ? ` · ${date}` : ""}
-      </p>
-      <p className="text-[12px] leading-tight text-[#274b3a]/75">{photo.drinkName}</p>
-      {yours ? <p className="text-xs font-semibold text-[#274b3a]">Your photo</p> : null}
     </button>
   );
 }
@@ -221,20 +217,32 @@ export function PhotoLeaderboard({
     );
   }
 
-  const prizes = photos.slice(0, PRIZE_RANKS);
-  const rest = photos.slice(PRIZE_RANKS);
-
   return (
     <div className="pt-1">
-      <h1 className="text-center font-heading text-[1.85rem] leading-none tracking-wide uppercase">Top picks.</h1>
-      <p className="mt-2 text-center text-sm text-[#274b3a]/75">The top two win free coffee for a month.</p>
+      <div className="text-center">
+        <h1 className="font-heading text-[2.35rem] leading-none tracking-wide text-[#274b3a] uppercase">Top picks.</h1>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-snug text-balance text-[#274b3a]/80">
+          Help choose who wins free coffee for a month.
+        </p>
+        <p className="mt-4 text-sm text-[#274b3a]/70">Your cup could be next.</p>
+        {onEnter ? (
+          <button
+            type="button"
+            onClick={onEnter}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#274b3a] px-5 py-2.5 text-sm font-semibold text-[#f3f2ef]"
+          >
+            Enter your photo
+            <span aria-hidden="true">→</span>
+          </button>
+        ) : null}
+      </div>
 
       {status === "loading" ? (
         <div role="status" className="mt-4">
           <p className="sr-only">Loading top picks</p>
-          <div className="grid grid-cols-2 gap-3 md:gap-5">
-            <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
-            <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            <div className="aspect-square animate-pulse rounded-[1.15rem] bg-[#e7e4de]" />
+            <div className="aspect-square animate-pulse rounded-[1.15rem] bg-[#e7e4de]" />
           </div>
         </div>
       ) : null}
@@ -253,28 +261,26 @@ export function PhotoLeaderboard({
       ) : null}
 
       {status === "ready" && photos.length > 0 ? (
-        <div className="mt-4">
-          <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:gap-5">
-            {prizes.map((photo, index) => (
+        <div className="mt-5">
+          <div className="flex items-center gap-3 text-[13px] text-[#274b3a]/55">
+            <span className="h-px flex-1 bg-[#274b3a]/15" />
+            <p>Tap a photo to view & vote</p>
+            <span className="h-px flex-1 bg-[#274b3a]/15" />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-4 md:gap-4">
+            {photos.map((photo, index) => (
               <PickCard key={photo.id} photo={photo} rank={index + 1} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
             ))}
           </div>
-          {rest.length > 0 ? (
-            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 md:mt-8 md:grid-cols-4 md:gap-4">
-              {rest.map((photo, index) => (
-                <PickCard key={photo.id} photo={photo} rank={index + PRIZE_RANKS + 1} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
-              ))}
-            </div>
-          ) : null}
           {hasMore ? (
-            <div ref={sentinelRef} className="mt-4 grid grid-cols-2 gap-3" aria-hidden={loadingMore ? undefined : true}>
+            <div ref={sentinelRef} className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4" aria-hidden={loadingMore ? undefined : true}>
               {loadingMore ? (
                 <>
                   <p className="sr-only" role="status">
                     Loading more photos
                   </p>
-                  <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
-                  <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
+                  <div className="aspect-square animate-pulse rounded-[1.15rem] bg-[#e7e4de]" />
+                  <div className="aspect-square animate-pulse rounded-[1.15rem] bg-[#e7e4de]" />
                 </>
               ) : (
                 <div className="col-span-2 h-8" />

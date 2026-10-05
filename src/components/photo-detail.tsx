@@ -38,7 +38,7 @@ export function PhotoDetail({
       .then((data) => {
         setPhoto(data.photo);
         setStatus("ready");
-        document.title = `Vote for ${data.photo.personName} · Urban Grind`;
+        document.title = "Urban Grind Photo Content";
       })
       .catch((caught) => {
         if (controller.signal.aborted) return;
@@ -51,7 +51,7 @@ export function PhotoDetail({
       });
     return () => {
       controller.abort();
-      document.title = "Sip. Snap. Swipe. · Urban Grind";
+      document.title = "Urban Grind Photo Content";
     };
   }, [code, ready, voterId, reloadKey]);
 

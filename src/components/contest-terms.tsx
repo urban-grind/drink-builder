@@ -35,7 +35,7 @@ export function ContestTerms() {
             The contest is open to Ontario residents aged 18 or older. Urban Grind owners, employees and members of their households are not eligible to win.
           </p>
           <p>
-            Entries open on Wednesday, October 7, 2026, at 12:00 a.m. and close on Friday, October 23, 2026, at 11:59 p.m. Voting closes on Friday, October 23, 2026, at 11:59 p.m. All times are Eastern Time.
+            Entries open on Wednesday, October 7, 2026, at 12:00 a.m. and close on Monday, October 19, 2026, at 12:00 a.m. Voting closes on Friday, October 23, 2026, at 11:59 p.m. All times are Eastern Time.
           </p>
           <p>
             <strong>No purchase is necessary.</strong> You may enter a qualifying photo using your own non-competitor cup or mug and a homemade drink.
@@ -110,21 +110,21 @@ export function ContestTerms() {
           </p>
         </Section>
 
-        <Section title="7. Prize and winner selection">
+        <Section title="7. Prizes and winner selection">
           <p>
-            There is 1 prize available.
+            There are 2 prizes available.
           </p>
           <p>
             “Free coffee for a month” means one drink of any size and any type for each day Urban Grind is open in November 2026, redeemable at Urban Grind Coffee Co. in Barrie.
           </p>
           <p>
-            The approximate retail value of the prize is $250 CAD. The prize is non-transferable and has no cash alternative. Unused entitlements expire at the end of November 2026.
+            The approximate retail value of each prize is $250 CAD. Each prize is non-transferable and has no cash alternative. Unused entitlements expire at the end of November 2026.
           </p>
           <p>
-            The winner will be the eligible entry with the most valid votes. A tie is broken by a one-on-one showdown between the tied entries. The showdown lasts 72 hours. The likelihood of winning depends on the number of eligible entries and the valid votes they receive.
+            The winners will be the two eligible entries with the most valid votes. A tie for a winning place is broken by a one-on-one showdown between the tied entries. The showdown lasts 72 hours. The likelihood of winning depends on the number of eligible entries and the valid votes they receive.
           </p>
           <p>
-            The potential winner will be contacted by <Blank>[date]</Blank> and must respond within <Blank>[number] days</Blank>, verify eligibility and complete any published prize-claim requirements. If they fail to do so, an alternate will be selected using the same rules.
+            The potential winners will be contacted by <Blank>[date]</Blank> and must respond within <Blank>[number] days</Blank>, verify eligibility and complete any published prize-claim requirements. If they fail to do so, an alternate will be selected using the same rules.
           </p>
         </Section>
 

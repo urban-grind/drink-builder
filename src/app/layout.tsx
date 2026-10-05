@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Urban Grind",
+    default: "Urban Grind Photo Content",
     template: "%s · Urban Grind",
   },
   description: "Photos of drinks from Urban Grind. Add yours.",

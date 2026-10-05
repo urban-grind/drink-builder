@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   const image = origin ? `${origin}${photoShareImagePath(code)}` : photoShareImagePath(code);
   const pageUrl = origin ? `${origin}/p/${code}` : `/p/${code}`;
   return {
-    title: card.title,
+    title: { absolute: "Urban Grind Photo Content" },
     description: card.description,
     openGraph: {
       title: card.title,

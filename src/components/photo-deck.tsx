@@ -418,7 +418,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             }}
             className="inline-flex items-center rounded-full border border-[#274b3a] bg-transparent px-3.5 py-2 text-sm font-semibold text-[#274b3a]"
           >
-            + Upload
+            + Enter
           </button>
         )}
         </div>
@@ -472,7 +472,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
                   }}
                   className="inline-flex rounded-full border border-[#274b3a] px-4 py-2 text-[11px] font-bold tracking-[0.12em] text-[#274b3a] uppercase"
                 >
-                  Win free coffee for a month
+                  Enter your photo
                 </button>
                 <button
                   type="button"
@@ -699,13 +699,9 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "upload" ? (
-        <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-[500px] md:px-0 md:pb-28">
-          <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">Win free coffee for a month</h1>
-          <p className="mt-3 text-center text-sm leading-relaxed text-[#274b3a]/75">
-            Got a photo of your drink? Enter the contest for your chance to win free coffee for a month.
-          </p>
-          <EntryCountdown className="mt-5 flex flex-col items-center" />
-          <div className="mt-8">
+        <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-8 md:max-w-[500px] md:px-0 md:pb-16">
+          <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">Enter your photo</h1>
+          <div className="mt-6">
             <PhotoEntryForm
               presentation="shell"
               active
@@ -758,6 +754,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
         </div>
       ) : null}
 
+      {screen !== "upload" ? (
       <nav aria-label="Contest" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.45rem,env(safe-area-inset-bottom))] md:pb-6">
         <div className="pointer-events-auto grid w-full max-w-[22rem] grid-cols-4 rounded-full border border-[#274b3a]/10 bg-[#f7f6f3]/95 px-1 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.16)] backdrop-blur-md md:max-w-[34rem] md:px-2 md:py-2">
           {(
@@ -784,6 +781,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
           ))}
         </div>
       </nav>
+      ) : null}
     </div>
   );
 }

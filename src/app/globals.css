@@ -179,10 +179,29 @@
   animation-delay: 1.3s;
 }
 
+@keyframes crop-settle {
+  0% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.crop-settle {
+  animation: crop-settle 1.05s cubic-bezier(0.22, 0.8, 0.28, 1) 0.15s both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cup-steam {
     animation: none;
     opacity: 0.35;
+  }
+  .crop-settle {
+    animation: none;
   }
 }
 
