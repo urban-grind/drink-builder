@@ -389,7 +389,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   }, [screen]);
 
   return (
-    <div className={`relative flex w-full flex-col ${screen === "vote" || screen === "picks" ? "min-h-dvh" : "h-dvh"}`}>
+    <div className={`relative flex w-full flex-col ${screen === "vote" || screen === "picks" || screen === "entry" || screen === "entered" ? "min-h-dvh" : "h-dvh"}`}>
       <header className="sticky top-0 z-30 shrink-0 border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-[26rem] items-center justify-between gap-4 px-5 pt-4 pb-3.5 md:max-w-7xl md:px-10 md:pt-6">
         <button type="button" onClick={() => goTab("vote")} className="shrink-0">
@@ -724,7 +724,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "entry" && entryCode ? (
-        <div className="mx-auto flex min-h-0 w-full max-w-[26rem] flex-1 flex-col overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-28">
+        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-28">
           <PhotoDetail
             code={entryCode}
             onBack={() => router.push("/?picks=1")}
@@ -740,7 +740,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "entered" && entered ? (
-        <div className="mx-auto flex min-h-0 w-full max-w-[26rem] flex-1 flex-col overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-28">
+        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-28">
           <PhotoEntryView
             mode="owner"
             personName={entered.personName}

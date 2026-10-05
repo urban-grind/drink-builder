@@ -5,7 +5,7 @@ import type { InstagramSize } from "@/lib/instagram-png";
 import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
 import { phoneSharesPng } from "@/lib/share-png";
 import { firstName } from "@/lib/first-name";
-import { ownerStandingLine } from "@/lib/photo-standing";
+import { ownerPlaceLine, ownerStandingBanner } from "@/lib/photo-standing";
 export type OwnerEntry = {
   personName: string;
   drinkName: string;
@@ -146,7 +146,8 @@ export function PhotoEntryView({
         : "Waiting for approval. You can still share it."
       : `Help ${name} win free coffee for a month.`;
   const votes = `${voteCount} ${voteCount === 1 ? "vote" : "votes"}`;
-  const standing = ownerStandingLine({ live, voteCount, rank, votesFromTopTwo });
+  const banner = ownerStandingBanner({ live, voteCount, rank, votesFromTopTwo });
+  const place = ownerPlaceLine({ live, voteCount, rank });
   const onPhoto =
     "inline-flex min-h-11 w-full items-center justify-center rounded-full px-2 py-2 text-center text-[13px] font-semibold leading-tight shadow-[0_8px_20px_rgb(0_0_0/0.22)]";
   return (
@@ -159,28 +160,29 @@ export function PhotoEntryView({
       ) : null}
       <h1 className="shrink-0 font-heading text-[1.7rem] leading-tight tracking-wide uppercase text-balance">{headline}</h1>
       <p className="mt-2 shrink-0 text-sm text-[#274b3a]/75">{subtitle}</p>
-      <div className="relative mt-4 md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center">
+      <div className="relative mt-4 overflow-hidden rounded-2xl">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photoUrl}
           alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
-          className={`aspect-[4/5] w-full rounded-2xl bg-[#e7e4de] object-cover md:h-full md:max-h-full md:w-auto md:max-w-full ${
-            mode === "owner" ? "max-h-[calc(100dvh-31rem)]" : "max-h-[calc(100dvh-22rem)]"
-          }`}
+          className="aspect-[4/5] w-full bg-[#e7e4de] object-cover"
         />
         {mode === "owner" ? (
-          <div className="absolute inset-x-3 bottom-3 grid grid-cols-2 gap-2 md:hidden">
-            <button
-              type="button"
-              className={`${onPhoto} gap-1.5 bg-[#274b3a] text-[#f3f2ef]`}
-              onClick={() => void shareLink()}
-            >
-              <ShareArrow />
-              {shareNote ?? "Share voting link"}
-            </button>
-            <button type="button" className={`${onPhoto} bg-white/95 text-[#274b3a]`} onClick={() => void copyLink()}>
-              {copied ? "Copied" : "Copy voting link"}
-            </button>
+          <div className="absolute inset-x-0 top-0">
+            <p className="bg-[#274b3a] px-4 py-2.5 text-center text-sm font-semibold text-[#f3f2ef]">{banner}</p>
+            <div className="grid grid-cols-2 gap-2 px-3 pt-3">
+              <button
+                type="button"
+                className={`${onPhoto} gap-1.5 bg-[#274b3a] text-[#f3f2ef]`}
+                onClick={() => void shareLink()}
+              >
+                <ShareArrow />
+                {shareNote ?? "Share voting link"}
+              </button>
+              <button type="button" className={`${onPhoto} bg-white/95 text-[#274b3a]`} onClick={() => void copyLink()}>
+                {copied ? "Copied" : "Copy voting link"}
+              </button>
+            </div>
           </div>
         ) : mode === "visitor" ? (
           <div className="absolute inset-x-3 bottom-3 flex flex-col gap-2 md:hidden">
@@ -227,20 +229,11 @@ export function PhotoEntryView({
             </p>
           ) : null}
         </div>
-        {mode === "owner" ? <p className="mt-1 text-sm text-[#274b3a]/75">{standing}</p> : null}
+        {place ? <p className="mt-1 text-sm text-[#274b3a]/75">{place}</p> : null}
       </div>
 
       {mode === "owner" ? (
         <div className="mt-3 flex shrink-0 flex-col gap-2">
-          <div className="hidden grid-cols-2 gap-2 md:grid">
-            <button type="button" className={greenButton} onClick={() => void shareLink()}>
-              <ShareArrow />
-              {shareNote ?? "Share voting link"}
-            </button>
-            <button type="button" className={outlineButton} onClick={() => void copyLink()}>
-              {copied ? "Copied" : "Copy voting link"}
-            </button>
-          </div>
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("story")}>
             {download === "story" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram story"}
           </button>

@@ -7,6 +7,30 @@ function ordinal(rank: number): string {
   return `${rank}th`;
 }
 
+/** The line across the top of the owner's photo. The gap is the part that matters. */
+export function ownerStandingBanner(input: {
+  live: boolean;
+  voteCount: number;
+  rank: number | null;
+  votesFromTopTwo: number | null;
+}): string {
+  if (!input.live) return "Waiting for approval. You can still share your link.";
+  if (input.voteCount === 0 || input.rank == null) return "Share your link to get your first vote.";
+  if (input.rank <= 2) return "In the top two";
+  if (input.votesFromTopTwo != null) {
+    const gap = input.votesFromTopTwo;
+    return `${gap} ${gap === 1 ? "vote" : "votes"} from the top two`;
+  }
+  return ordinal(input.rank);
+}
+
+/** Vote count and place, without the gap. The banner carries the gap. */
+export function ownerPlaceLine(input: { live: boolean; voteCount: number; rank: number | null }): string | null {
+  if (!input.live || input.voteCount === 0 || input.rank == null) return null;
+  const votes = `${input.voteCount} ${input.voteCount === 1 ? "vote" : "votes"}`;
+  return `${votes} · ${ordinal(input.rank)}`;
+}
+
 /** Votes, place, and the gap to the top two. A new entry has no rank yet. */
 export function ownerStandingLine(input: {
   live: boolean;
