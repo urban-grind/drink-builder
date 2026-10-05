@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import type { InstagramSize } from "@/lib/instagram-png";
 import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
+import { phoneSharesPng } from "@/lib/share-png";
 import { firstName } from "@/lib/first-name";
 import { ownerStandingLine } from "@/lib/photo-standing";
 export type OwnerEntry = {
@@ -63,6 +64,7 @@ export function PhotoEntryView({
   const [copyFailed, setCopyFailed] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [download, setDownload] = useState<InstagramSize | null>(null);
+  const [sharing, setSharing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,14 +120,19 @@ export function PhotoEntryView({
 
   async function save(size: InstagramSize) {
     if (download) return;
+    const share = phoneSharesPng();
     setDownload(size);
+    setSharing(share);
     setActionError(null);
     try {
-      await savePhotoInstagramPng({ personName, drinkName: drink || "Your drink", photoUrl }, size, false);
+      await savePhotoInstagramPng({ personName, drinkName: drink || "Your drink", photoUrl }, size, share);
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : "The picture didn't save.");
+      setActionError(
+        caught instanceof Error ? caught.message : share ? "The picture didn't share." : "The picture didn't save.",
+      );
     } finally {
       setDownload(null);
+      setSharing(false);
     }
   }
 
@@ -235,10 +242,10 @@ export function PhotoEntryView({
             </button>
           </div>
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("story")}>
-            {download === "story" ? "Saving…" : "Download Instagram story"}
+            {download === "story" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram story"}
           </button>
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("square")}>
-            {download === "square" ? "Saving…" : "Download Instagram post"}
+            {download === "square" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram post"}
           </button>
         </div>
       ) : (
