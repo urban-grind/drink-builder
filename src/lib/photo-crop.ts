@@ -34,11 +34,9 @@ export function parsePhotoCrop(input: unknown): PhotoCrop | null {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const x = record.x;
-  const y = record.y;
-  const width = record.width;
-  const height = record.height;
-  if (![x, y, width, height].every((part) => typeof part === "number" && Number.isFinite(part))) return null;
+  const { x, y, width, height } = record;
+  if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number") return null;
+  if (![x, y, width, height].every((part) => Number.isFinite(part))) return null;
   if (width < 0.05 || height < 0.05) return null;
   if (x < -0.001 || y < -0.001 || x + width > 1.001 || y + height > 1.001) return null;
   return roundCrop({

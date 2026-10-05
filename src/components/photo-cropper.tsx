@@ -144,7 +144,7 @@ export function PhotoCropper({
           onLoad={(event) => {
             const cover = coverCrop(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight);
             coverRef.current = cover;
-            publish(cover, 1);
+            publish(cover);
           }}
           onError={onError}
           className="pointer-events-none absolute max-w-none select-none"
