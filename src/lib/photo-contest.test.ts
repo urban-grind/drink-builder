@@ -20,6 +20,7 @@ import {
   standingsFor,
   listPhotoBoard,
   listPhotoDeck,
+  contestActivity,
   listPhotoLeaderboard,
   listReviewPhotos,
   checkPhotoContact,
@@ -826,6 +827,32 @@ describe("photo contest", { concurrency: false }, () => {
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  it("counts public photos and votes in total and since midnight Eastern", () => {
+    const now = new Date("2026-10-05T22:00:00.000Z");
+    const before = contestActivity(now);
+    const db = getDb();
+    const insert = db.prepare(
+      `INSERT INTO photo_entries (
+        id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, public_code
+      ) VALUES (?, 'Ada', NULL, NULL, 'Latte', '', ?, ?, 'image/jpeg', 'vote', 'thumb', ?, ?)`,
+    );
+    const todayId = crypto.randomUUID();
+    const olderId = crypto.randomUUID();
+    const pendingId = crypto.randomUUID();
+    insert.run(todayId, "approved", `activity/${todayId}`, "2026-10-05T18:00:00.000Z", "aaaaaa");
+    insert.run(olderId, "approved", `activity/${olderId}`, "2026-10-04T18:00:00.000Z", "bbbbbb");
+    insert.run(pendingId, "pending", `activity/${pendingId}`, "2026-10-05T18:00:00.000Z", "cccccc");
+    const vote = db.prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at) VALUES (?, ?, ?)");
+    vote.run(todayId, "voter-today", "2026-10-05T19:00:00.000Z");
+    vote.run(olderId, "voter-older", "2026-10-04T19:00:00.000Z");
+    vote.run(pendingId, "voter-pending", "2026-10-05T19:00:00.000Z");
+    const after = contestActivity(now);
+    assert.equal(after.photos, before.photos + 2);
+    assert.equal(after.photosToday, before.photosToday + 1);
+    assert.equal(after.votes, before.votes + 2);
+    assert.equal(after.votesToday, before.votesToday + 1);
   });
 
   it("allows another photo with the same email or phone", async () => {

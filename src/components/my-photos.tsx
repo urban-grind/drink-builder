@@ -90,8 +90,8 @@ export function MyPhotos({
   return (
     <div className="mx-auto flex w-full max-w-[26rem] flex-col gap-5 px-5 py-4 md:max-w-xl md:px-10">
       <div>
-        <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">My Photos</h1>
-        <p className="mt-2 text-center text-sm text-[#274b3a]/75">Photos entered from this phone.</p>
+        <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">My Entries</h1>
+        <p className="mt-2 text-center text-sm text-[#274b3a]/75">Photos you've entered in the contest.</p>
       </div>
 
       {status === "loading" ? (
@@ -153,7 +153,7 @@ export function MyPhotos({
       >
         <ContactField
           id={contactId}
-          label="Don't see your photos? Sign in with your email or phone number."
+          label="Don't see your entries? Sign in with your email or phone number."
           value={contact}
           onChange={onContact}
           onBlur={onContactBlur}

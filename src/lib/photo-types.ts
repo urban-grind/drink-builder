@@ -29,6 +29,14 @@ export type ReviewPhoto = PublicPhoto & {
   status: PhotoStatus;
 };
 
+/** Public board totals, plus what arrived since midnight Eastern. */
+export type ContestActivity = {
+  photos: number;
+  votes: number;
+  photosToday: number;
+  votesToday: number;
+};
+
 /** A ranked contest photo. likePercent is null until someone votes or skips. */
 export type LeaderboardEntry = {
   id: string;

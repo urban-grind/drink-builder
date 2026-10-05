@@ -5,14 +5,19 @@ import { PhotoDetail } from "@/components/photo-detail";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
 import { firstName } from "@/lib/first-name";
-import type { LeaderboardEntry, PublicPhoto } from "@/lib/photo-types";
+import type { ContestActivity, LeaderboardEntry, PublicPhoto } from "@/lib/photo-types";
 
 const PAGE_SIZE = 4;
 
 type LeaderboardPage = {
   photos: LeaderboardEntry[];
   hasMore: boolean;
+  activity?: ContestActivity;
 };
+
+function countWord(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
 
 function pagePath(offset: number): string {
   const params = new URLSearchParams({ offset: String(offset), limit: String(PAGE_SIZE) });
@@ -21,6 +26,68 @@ function pagePath(offset: number): string {
 
 function voteLabel(count: number): string {
   return `${count} ${count === 1 ? "vote" : "votes"}`;
+}
+
+function EntryMark() {
+  return (
+    <svg viewBox="0 0 56 48" aria-hidden="true" className="h-11 w-12 shrink-0">
+      <rect x="6" y="10" width="30" height="26" rx="4" fill="#d7e2da" transform="rotate(-10 21 23)" />
+      <rect x="16" y="6" width="32" height="30" rx="5" fill="#ffffff" />
+      <path d="M20 28.5l7.2-7 5.2 5.2 3.4-2.6 7.2 7.2H20z" fill="#8eaa98" />
+      <circle cx="38" cy="14" r="2" fill="#d5e0d8" />
+    </svg>
+  );
+}
+
+function VoteMark() {
+  return (
+    <svg viewBox="0 0 48 50" aria-hidden="true" className="h-11 w-11 shrink-0">
+      <path d="M8 8h28a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8H22l-8 8v-8H8a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z" fill="#f6d8d1" />
+      <path
+        d="M24 30.2s-5.4-3.4-5.4-7c0-2.2 1.4-3.6 3.2-3.6 1 0 1.9.5 2.2 1.2.3-.7 1.2-1.2 2.2-1.2 1.8 0 3.2 1.4 3.2 3.6 0 3.6-5.4 7-5.4 7z"
+        fill="#d16b62"
+      />
+    </svg>
+  );
+}
+
+function CupArrow() {
+  return (
+    <svg viewBox="0 0 42 36" aria-hidden="true" className="h-8 w-9 shrink-0 text-[#6d8a7a]">
+      <path d="M8 7c7 1 12 8 14 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M16 22.5 23 27l1.2-8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ActivityCards({ activity }: { activity: ContestActivity }) {
+  return (
+    <div className="mx-auto mt-5 max-w-md">
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="flex items-center gap-1.5 rounded-[1.15rem] bg-[#e7f0ea] px-2.5 py-3 sm:gap-2.5 sm:px-3.5">
+          <EntryMark />
+          <div className="min-w-0 text-left">
+            <p className="font-heading text-[1.85rem] leading-none tabular-nums text-[#274b3a]">{activity.photos}</p>
+            <p className="mt-1 text-[10px] font-bold tracking-[0.14em] text-[#274b3a]">ENTRIES</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-[1.15rem] bg-[#fbf6ef] px-2.5 py-3 sm:gap-2.5 sm:px-3.5">
+          <VoteMark />
+          <div className="min-w-0 text-left">
+            <p className="font-heading text-[1.85rem] leading-none tabular-nums text-[#274b3a]">{activity.votes}</p>
+            <p className="mt-1 text-[10px] font-bold tracking-[0.12em] text-[#274b3a]">TOTAL VOTES</p>
+          </div>
+        </div>
+      </div>
+      <p className="mt-4 text-sm text-[#5d7468]">
+        {countWord(activity.photosToday, "photo")} and {countWord(activity.votesToday, "vote")} today
+      </p>
+      <div className="mt-1 flex items-end justify-center gap-1">
+        <CupArrow />
+        <p className="pb-0.5 text-sm text-[#274b3a]/75">Your cup could be next.</p>
+      </div>
+    </div>
+  );
 }
 
 function HeartMark() {
@@ -107,6 +174,7 @@ export function PhotoLeaderboard({
   const [moreError, setMoreError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [openCode, setOpenCode] = useState<string | null>(null);
+  const [activity, setActivity] = useState<ContestActivity | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const photosRef = useRef<LeaderboardEntry[]>([]);
   const hasMoreRef = useRef(false);
@@ -130,6 +198,7 @@ export function PhotoLeaderboard({
         setHasMore(data.hasMore);
         setMoreError("");
         setError("");
+        setActivity(data.activity ?? null);
         setStatus("ready");
       })
       .catch((caught) => {
@@ -218,7 +287,11 @@ export function PhotoLeaderboard({
         <p className="mx-auto mt-3 max-w-sm text-sm leading-snug text-balance text-[#274b3a]/80">
           Help choose who wins free coffee for a month.
         </p>
-        <p className="mt-4 text-sm text-[#274b3a]/70">Your cup could be next.</p>
+        {activity ? (
+          <ActivityCards activity={activity} />
+        ) : (
+          <p className="mt-4 text-sm text-[#274b3a]/70">Your cup could be next.</p>
+        )}
         {onEnter ? (
           <button
             type="button"

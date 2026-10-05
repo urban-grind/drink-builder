@@ -751,7 +751,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             createdAt={entered.createdAt}
             entryPath={photoEntryPath(entered.code)}
             live={entered.live}
-            backLabel={enteredFrom === "mine" ? "My entries" : "Leaderboard"}
+            backLabel={enteredFrom === "mine" ? "My Entries" : "Leaderboard"}
             onBack={() => setScreen(enteredFrom === "mine" ? "mine" : "picks")}
           />
         </div>

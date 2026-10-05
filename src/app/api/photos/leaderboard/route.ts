@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { jsonError, jsonOk } from "@/lib/api";
-import { LEADERBOARD_PAGE_SIZE, listPhotoLeaderboard } from "@/lib/photos";
+import { contestActivity, LEADERBOARD_PAGE_SIZE, listPhotoLeaderboard } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
 
 export const runtime = "nodejs";
@@ -17,12 +17,13 @@ export async function GET(request: Request) {
   await connection();
   const url = new URL(request.url);
   try {
-    return jsonOk(
-      listPhotoLeaderboard({
+    return jsonOk({
+      ...listPhotoLeaderboard({
         offset: pageNumber(url.searchParams.get("offset"), 0, 10_000),
         limit: pageNumber(url.searchParams.get("limit"), LEADERBOARD_PAGE_SIZE, 24),
       }),
-    );
+      activity: contestActivity(),
+    });
   } catch (error) {
     console.error("Failed to load the leaderboard", safeErrorText(error));
     return jsonError(500, "SERVER", "The leaderboard didn't load. Try again.");

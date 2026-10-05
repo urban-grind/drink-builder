@@ -5,7 +5,8 @@ import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
 import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib/sample-photos";
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage } from "@/lib/r2";
-import type { LeaderboardEntry, OwnedPhoto, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
+import type { ContestActivity, LeaderboardEntry, OwnedPhoto, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
+import { easternDayRange } from "@/lib/eastern-day";
 import { parsePhotoContact, validatePhotoEntry } from "@/lib/photo-validation";
 import type { FieldErrors } from "@/lib/types";
 
@@ -252,6 +253,44 @@ export function listPhotoLeaderboard(options?: { offset?: number; limit?: number
     };
   });
   return { photos, hasMore };
+}
+
+/**
+ * Photos on the public board, and votes on those photos.
+ * Today is midnight to midnight Eastern. Pending and removed photos stay out.
+ */
+export function contestActivity(now = new Date()): ContestActivity {
+  ensureSamplePhotos();
+  const day = easternDayRange(now);
+  const flag = sampleVisibilityFlag();
+  const row = getDb()
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM photo_entries e
+           WHERE e.status = 'approved' AND ${sampleVisibilitySql()}) AS photos,
+         (SELECT COUNT(*) FROM photo_entries e
+           WHERE e.status = 'approved' AND ${sampleVisibilitySql()}
+             AND e.created_at >= ? AND e.created_at < ?) AS photos_today,
+         (SELECT COUNT(*) FROM photo_votes v
+           JOIN photo_entries e ON e.id = v.photo_id
+           WHERE e.status = 'approved' AND ${sampleVisibilitySql()}) AS votes,
+         (SELECT COUNT(*) FROM photo_votes v
+           JOIN photo_entries e ON e.id = v.photo_id
+           WHERE e.status = 'approved' AND ${sampleVisibilitySql()}
+             AND v.created_at >= ? AND v.created_at < ?) AS votes_today`,
+    )
+    .get(flag, flag, day.start, day.end, flag, flag, day.start, day.end) as {
+    photos: number;
+    photos_today: number;
+    votes: number;
+    votes_today: number;
+  };
+  return {
+    photos: Number(row.photos),
+    votes: Number(row.votes),
+    photosToday: Number(row.photos_today),
+    votesToday: Number(row.votes_today),
+  };
 }
 
 /**

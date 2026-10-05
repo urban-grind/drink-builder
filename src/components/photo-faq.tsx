@@ -27,7 +27,7 @@ const questions = [
   },
   {
     question: "How do I find my photos later?",
-    answer: "Open My Photos. On another phone, enter the same email or phone you used.",
+    answer: "Open My Entries. On another phone, enter the same email or phone you used.",
   },
 ] as const;
 
