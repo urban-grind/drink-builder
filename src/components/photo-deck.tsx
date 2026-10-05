@@ -83,6 +83,11 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const [screen, setScreen] = useState<Screen>(entryCode ? "entry" : "vote");
   const [uploadBack, setUploadBack] = useState<ReturnScreen>("vote");
   const [entered, setEntered] = useState<OwnerEntry | null>(null);
+  const [enteredVotes, setEnteredVotes] = useState(0);
+  const [enteredRank, setEnteredRank] = useState<number | null>(null);
+  const [enteredGap, setEnteredGap] = useState<number | null>(null);
+  const [enteredFrom, setEnteredFrom] = useState<"upload" | "mine">("upload");
+  const [votedNotice, setVotedNotice] = useState(false);
   const myPhotoIds = useMyPhotoIds();
   const photosRef = useRef<PublicPhoto[]>([]);
   const startX = useRef<number | null>(null);
@@ -192,6 +197,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     const photo = current;
     setBusy(true);
     setError("");
+    setVotedNotice(false);
     startX.current = null;
     setFlight(action === "vote" ? "right" : "left");
     try {
@@ -206,6 +212,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       setDrag(0);
       setPhotos((items) => items.filter((item) => item.id !== photo.id));
       setLast({ photo, action });
+      setVotedNotice(action === "vote");
       setBoardRevision((value) => value + 1);
     } catch (caught) {
       setFlight("back");
@@ -231,6 +238,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
         setFlight(data.action === "vote" ? "undo-right" : "undo-left");
         setPhotos((items) => [data.photo, ...items.filter((item) => item.id !== data.photo.id)]);
         setLast(null);
+        setVotedNotice(false);
         setBoardRevision((value) => value + 1);
       });
       window.requestAnimationFrame(() => {
@@ -381,7 +389,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   }, [screen]);
 
   return (
-    <div className={`relative flex w-full flex-col ${screen === "vote" ? "min-h-dvh" : "h-dvh"}`}>
+    <div className={`relative flex w-full flex-col ${screen === "vote" || screen === "picks" ? "min-h-dvh" : "h-dvh"}`}>
       <header className="sticky top-0 z-30 shrink-0 border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-[26rem] items-center justify-between gap-4 px-5 pt-4 pb-3.5 md:max-w-7xl md:px-10 md:pt-6">
         <button type="button" onClick={() => goTab("vote")} className="shrink-0">
@@ -420,11 +428,30 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
         <div className="mx-auto w-full max-w-[26rem] px-4 md:max-w-7xl md:px-10">
           <section className="grid grid-cols-1 pt-6 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] md:items-center md:gap-x-20 md:pt-10 md:pb-28">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/contest-snap.jpg"
-              alt="Photographing an Urban Grind cup."
-              className="order-3 mx-auto mt-5 h-[28rem] w-full max-w-[22rem] rounded-[1.35rem] object-cover object-[center_42%] md:order-none md:mt-0 md:h-auto md:max-h-[min(40rem,72vh)] md:w-full md:max-w-none md:justify-self-end md:aspect-[3/4]"
-            />
+            <div className="relative order-3 mx-auto mt-5 w-full max-w-[22rem] md:order-none md:mt-0 md:w-full md:max-w-none md:justify-self-end">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/contest-snap.jpg"
+                alt="Photographing an Urban Grind cup."
+                className="h-[28rem] w-full rounded-[1.35rem] object-cover object-[center_42%] md:h-auto md:max-h-[min(40rem,72vh)] md:aspect-[3/4]"
+              />
+              <div className="absolute right-3 bottom-24 flex items-end gap-2 md:bottom-3">
+                <div className="h-24 w-[4.5rem] overflow-hidden rounded-xl shadow-[0_10px_24px_rgb(39_75_58/0.28)] ring-2 ring-[#f7f4ec] md:h-32 md:w-24">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/photos/wall-drink.jpg"
+                    alt="A customer holding an Urban Grind drink."
+                    className="h-[250%] w-full max-w-none -translate-y-[62%] object-cover"
+                  />
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/photos/cup-beans.jpg"
+                  alt="An Urban Grind cup."
+                  className="h-28 w-20 rounded-xl object-cover object-top shadow-[0_10px_24px_rgb(39_75_58/0.28)] ring-2 ring-[#f7f4ec] md:h-36 md:w-28"
+                />
+              </div>
+            </div>
             <div className="contents md:flex md:flex-col md:items-start md:justify-center">
               <div className="order-1 text-center md:order-none md:text-left">
                 <h1 className="font-heading text-[1.75rem] leading-none tracking-wide uppercase md:text-6xl">Sip. Snap. Swipe.</h1>
@@ -602,6 +629,21 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             </p>
           ) : null}
 
+          {votedNotice ? (
+            <p className="mt-3 text-center text-sm text-[#274b3a]">
+              <span className="font-semibold">Vote counted.</span>{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadBack("vote");
+                  setScreen("upload");
+                }}
+                className="font-semibold underline underline-offset-2"
+              >
+                Want to win coffee too? Enter your photo
+              </button>
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => void undo()}
@@ -624,12 +666,27 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               setUploadBack("mine");
               setScreen("upload");
             }}
+            onOpen={(photo) => {
+              setEntered({
+                personName: photo.personName,
+                drinkName: photo.drinkName,
+                photoUrl: photo.imageUrl,
+                code: photo.code,
+                createdAt: photo.createdAt,
+                live: photo.status === "approved",
+              });
+              setEnteredVotes(photo.voteCount);
+              setEnteredRank(photo.rank);
+              setEnteredGap(photo.votesFromTopTwo);
+              setEnteredFrom("mine");
+              setScreen("entered");
+            }}
           />
         </div>
       ) : null}
 
       {screen === "picks" ? (
-        <div data-scroll-root className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-5xl md:px-10 md:pb-28">
+        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-5xl md:px-10 md:pb-28">
           <PhotoLeaderboard
             mine={myPhotoIds}
             revision={boardRevision}
@@ -645,7 +702,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
         <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-[500px] md:px-0 md:pb-28">
           <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">Win free coffee for a month</h1>
           <p className="mt-3 text-center text-sm leading-relaxed text-[#274b3a]/75">
-            Have the perfect Urban Grind photo? Enter the contest for your chance to win free coffee for a month.
+            Got a photo of your drink? Enter the contest for your chance to win free coffee for a month.
           </p>
           <EntryCountdown className="mt-5 flex flex-col items-center" />
           <div className="mt-8">
@@ -655,6 +712,10 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               onBack={() => setScreen(uploadBack)}
               onEntered={(entry) => {
                 setEntered(entry);
+                setEnteredVotes(0);
+                setEnteredRank(null);
+                setEnteredGap(null);
+                setEnteredFrom("upload");
                 setScreen("entered");
               }}
             />
@@ -685,11 +746,14 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             personName={entered.personName}
             drinkName={entered.drinkName}
             photoUrl={entered.photoUrl}
-            voteCount={0}
+            voteCount={enteredVotes}
+            rank={enteredRank}
+            votesFromTopTwo={enteredGap}
             createdAt={entered.createdAt}
             entryPath={photoEntryPath(entered.code)}
             live={entered.live}
-            onBack={() => setScreen("picks")}
+            backLabel={enteredFrom === "mine" ? "My entries" : "Top picks"}
+            onBack={() => setScreen(enteredFrom === "mine" ? "mine" : "picks")}
           />
         </div>
       ) : null}
@@ -699,9 +763,9 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
           {(
             [
               ["vote", "Vote"],
-              ["mine", "My Photos"],
-              ["picks", "Top picks"],
-              ["faq", "FAQ"],
+              ["picks", "Top Picks"],
+              ["mine", "My Entries"],
+              ["faq", "FAQs"],
             ] as const
           ).map(([tab, label]) => (
             <button

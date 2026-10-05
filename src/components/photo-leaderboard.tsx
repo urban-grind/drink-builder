@@ -153,7 +153,6 @@ export function PhotoLeaderboard({
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node || status !== "ready" || !hasMore) return;
-    const root = node.closest("[data-scroll-root]");
     let cancelled = false;
 
     async function loadMore() {
@@ -189,7 +188,7 @@ export function PhotoLeaderboard({
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void loadMore();
       },
-      { root: root instanceof Element ? root : null, rootMargin: "160px 0px" },
+      { rootMargin: "160px 0px" },
     );
     observer.observe(node);
     return () => {
@@ -200,7 +199,7 @@ export function PhotoLeaderboard({
 
   useEffect(() => {
     if (!openCode) return;
-    document.querySelector("[data-scroll-root]")?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
   }, [openCode]);
 
   function applyVote(photo: PublicPhoto) {
@@ -211,7 +210,7 @@ export function PhotoLeaderboard({
 
   if (openCode) {
     return (
-      <div className="pt-1 md:mx-auto md:flex md:h-full md:min-h-0 md:w-full md:max-w-[26rem] md:flex-col md:pt-0">
+      <div className="pt-1 md:mx-auto md:w-full md:max-w-[26rem] md:pt-0">
         <PhotoDetail
           code={openCode}
           onBack={() => setOpenCode(null)}

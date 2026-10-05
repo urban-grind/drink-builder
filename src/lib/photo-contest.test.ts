@@ -17,6 +17,7 @@ import {
   getPublicPhotoByCode,
   photoImageKey,
   compareLeaderboard,
+  standingsFor,
   listPhotoBoard,
   listPhotoDeck,
   listPhotoLeaderboard,
@@ -32,7 +33,7 @@ import {
 import { firstName, photoEntryPath } from "@/lib/first-name";
 import { discardUpload, prepareUpload, setPrepareHookForTests, voteKeyForUpload } from "@/lib/photo-prepare";
 import { coverCrop } from "@/lib/photo-crop";
-import { parsePhotoUploadRequest, termsAgreementError, validatePhotoEntry } from "@/lib/photo-validation";
+import { parsePhotoUploadRequest, parseTypedContact, termsAgreementError, validatePhotoEntry } from "@/lib/photo-validation";
 import { RESIZE_LIMIT, withResizeSlot } from "@/lib/resize-queue";
 import { getPhotoStorage, readR2Config, setPhotoStorageForTests, type PhotoStorage } from "@/lib/r2";
 import { developmentSampleCount } from "@/lib/sample-photos";
@@ -353,6 +354,39 @@ describe("photo contest", { concurrency: false }, () => {
     const decoded = await sharp(jpeg).metadata();
     assert.equal(decoded.format, "jpeg");
     assert.ok((decoded.width ?? 0) > 0);
+  });
+
+  it("checks one contact box as an email or a phone from what was typed", () => {
+    const email = parseTypedContact("  Case@Example.com ");
+    assert.equal(email.ok, true);
+    if (email.ok) assert.equal(email.email, "case@example.com");
+
+    const unfinished = parseTypedContact("ada@");
+    assert.equal(unfinished.ok, false);
+    if (!unfinished.ok) assert.match(unfinished.message, /email address/i);
+
+    const words = parseTypedContact("hello");
+    assert.equal(words.ok, false);
+    if (!words.ok) assert.match(words.message, /email address/i);
+
+    const phone = parseTypedContact("+1 (705) 555-0199");
+    assert.equal(phone.ok, true);
+    if (phone.ok) {
+      assert.equal(phone.phone, "7055550199");
+      assert.equal(phone.email, null);
+    }
+
+    const dottedPhone = parseTypedContact("705.555.0199");
+    assert.equal(dottedPhone.ok, true);
+    if (dottedPhone.ok) assert.equal(dottedPhone.phone, "7055550199");
+
+    const shortPhone = parseTypedContact("555-0199");
+    assert.equal(shortPhone.ok, false);
+    if (!shortPhone.ok) assert.match(shortPhone.message, /phone number/i);
+
+    const empty = parseTypedContact("   ");
+    assert.equal(empty.ok, false);
+    if (!empty.ok) assert.match(empty.message, /email or a phone/i);
   });
 
   it("keeps the original, hides pending photos, and separates emails from drinks", async () => {
@@ -700,6 +734,21 @@ describe("photo contest", { concurrency: false }, () => {
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  it("measures how far a photo is from the top two", () => {
+    const standings = standingsFor([
+      { id: "first", voteCount: 10 },
+      { id: "second", voteCount: 7 },
+      { id: "close", voteCount: 4 },
+      { id: "tied", voteCount: 7 },
+    ]);
+    assert.equal(standings.get("first")?.rank, 1);
+    assert.equal(standings.get("first")?.votesFromTopTwo, null);
+    assert.equal(standings.get("second")?.votesFromTopTwo, null);
+    assert.equal(standings.get("close")?.votesFromTopTwo, 3);
+    assert.equal(standings.get("tied")?.rank, 4);
+    assert.equal(standings.get("tied")?.votesFromTopTwo, null);
   });
 
   it("ranks the leaderboard by votes, then like percentage, and keeps skips on the server", () => {

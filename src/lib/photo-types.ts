@@ -17,6 +17,10 @@ export type PublicPhoto = {
 /** A photo this browser saved or recovered. Pending stays visible. Rejected does not. */
 export type OwnedPhoto = PublicPhoto & {
   status: "pending" | "approved";
+  /** Place on the public board. Pending photos are not ranked. */
+  rank: number | null;
+  /** Votes still needed to reach second place. Null when that gap is not a useful number. */
+  votesFromTopTwo: number | null;
 };
 
 export type ReviewPhoto = PublicPhoto & {

@@ -18,6 +18,35 @@ export const PHOTO_CONTENT_TYPES = [
 const EMAIL_PATTERN =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
+/** Letters or an @ mean they are typing an email. Digits and phone punctuation mean a number. */
+export function contactLooksLikeEmail(value: string): boolean {
+  return /[a-z@]/i.test(value);
+}
+
+export type TypedContact =
+  | { ok: true; email: string | null; phone: string | null; message: null }
+  | { ok: false; email: null; phone: null; message: string };
+
+/** One box. The rules follow whatever is in it. */
+export function parseTypedContact(value: string): TypedContact {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { ok: false, email: null, phone: null, message: "Add an email or a phone number." };
+  }
+  if (contactLooksLikeEmail(trimmed)) {
+    const email = trimmed.toLowerCase();
+    if (email.length > PHOTO_EMAIL_MAX || !EMAIL_PATTERN.test(email)) {
+      return { ok: false, email: null, phone: null, message: "Enter an email address like name@example.com." };
+    }
+    return { ok: true, email, phone: null, message: null };
+  }
+  const phone = normalizePhone(trimmed);
+  if (!phone) {
+    return { ok: false, email: null, phone: null, message: "Enter a phone number like 705-555-0199." };
+  }
+  return { ok: true, email: null, phone, message: null };
+}
+
 /** Digits only, with a leading country code 1 removed from an 11-digit number. */
 export function normalizePhone(input: string): string | null {
   const digits = input.replace(/\D/g, "");

@@ -12,25 +12,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
 import { useEarlyPhotoUpload } from "@/components/use-early-photo-upload";
 import { rememberMyPhoto } from "@/lib/local-votes";
+import { ContactField } from "@/components/contact-field";
 import {
   PHOTO_CAPTION_MAX,
-  PHOTO_EMAIL_MAX,
   PHOTO_MAX_BYTES,
   PHOTO_NAME_MAX,
+  formatStoredPhone,
   normalizePhotoType,
+  parseTypedContact,
   termsAgreementError,
   validatePhotoEntry,
 } from "@/lib/photo-validation";
 import { roundCrop, type PhotoCrop } from "@/lib/photo-crop";
 import { photoEntryPath } from "@/lib/first-name";
 import type { FieldErrors } from "@/lib/types";
-
-function splitContact(value: string): { email: string; phone: string } {
-  const trimmed = value.trim();
-  if (!trimmed) return { email: "", phone: "" };
-  if (trimmed.includes("@")) return { email: trimmed, phone: "" };
-  return { email: "", phone: trimmed };
-}
 
 export function PhotoEntryForm({
   presentation = "page",
@@ -54,15 +49,11 @@ export function PhotoEntryForm({
     photo: `${baseId}-file`,
     personName: `${baseId}-name`,
     contact: `${baseId}-contact`,
-    email: `${baseId}-email`,
-    phone: `${baseId}-phone`,
     drinkName: `${baseId}-drink`,
     caption: `${baseId}-caption`,
     terms: `${baseId}-terms`,
   };
   const [personName, setPersonName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [contact, setContact] = useState("");
   const [drinkName, setDrinkName] = useState("");
   const [caption, setCaption] = useState("");
@@ -166,6 +157,30 @@ export function PhotoEntryForm({
     void upload.start(next);
   }
 
+  function onContact(value: string) {
+    setContact(value);
+    setFields((current) => {
+      if (!current.contact) return current;
+      const next = parseTypedContact(value);
+      const copy = { ...current };
+      if (!value.trim() || next.ok) delete copy.contact;
+      else copy.contact = next.message;
+      return copy;
+    });
+  }
+
+  function onContactBlur() {
+    const next = parseTypedContact(contact);
+    if (!contact.trim()) return;
+    if (next.ok && next.phone) setContact(formatStoredPhone(next.phone));
+    setFields((current) => {
+      const copy = { ...current };
+      if (next.ok) delete copy.contact;
+      else copy.contact = next.message;
+      return copy;
+    });
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
@@ -177,12 +192,20 @@ export function PhotoEntryForm({
       nextFields.photo = "Use a JPEG, PNG, WebP, or HEIC photo.";
     }
 
-    const entered = presentation === "shell" ? splitContact(contact) : { email, phone };
-    const parsed = validatePhotoEntry({ personName, email: entered.email, phone: entered.phone, drinkName, caption });
-    if (!parsed.ok) Object.assign(nextFields, parsed.fields);
-    if (presentation === "shell" && (nextFields.email || nextFields.phone)) {
-      nextFields.contact = nextFields.email || nextFields.phone;
+    const typed = parseTypedContact(contact);
+    const parsed = validatePhotoEntry({
+      personName,
+      email: typed.email ?? "",
+      phone: typed.phone ?? "",
+      drinkName,
+      caption,
+    });
+    if (!parsed.ok) {
+      Object.assign(nextFields, parsed.fields);
+      delete nextFields.email;
+      delete nextFields.phone;
     }
+    if (!typed.ok) nextFields.contact = typed.message;
     const terms = termsAgreementError({ agreedToTerms: agreed });
     if (terms) nextFields.terms = terms;
     if (!file || Object.keys(nextFields).length > 0 || !parsed.ok) {
@@ -200,7 +223,7 @@ export function PhotoEntryForm({
     try {
       await requestJson("/api/photos/contact", {
         method: "POST",
-        body: JSON.stringify({ email: entered.email, phone: entered.phone }),
+        body: JSON.stringify({ email: typed.email ?? "", phone: typed.phone ?? "" }),
       });
 
       if (uploadsEnabled === false) {
@@ -258,7 +281,9 @@ export function PhotoEntryForm({
           upload.invalidate();
           if (file && uploadsEnabled !== false) void upload.start(file);
         }
-        if (presentation === "shell" && (next.email || next.phone)) next.contact = next.email || next.phone;
+        if (next.email || next.phone) next.contact = next.email || next.phone;
+        delete next.email;
+        delete next.phone;
         setFields(next);
         setFormError(error.message);
         focusFirst(next);
@@ -432,28 +457,15 @@ export function PhotoEntryForm({
           ) : null}
         </div>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor={fieldIds.contact}>Phone or email</Label>
-          <Input
-            id={fieldIds.contact}
-            name="contact"
-            value={contact}
-            onChange={(event) => setContact(event.target.value)}
-            maxLength={PHOTO_EMAIL_MAX}
-            autoComplete="on"
-            aria-invalid={Boolean(contactMessage)}
-            aria-describedby={contactMessage ? `${fieldIds.contact}-error ${contactHelpId}` : contactHelpId}
-            placeholder="705-555-0199 or name@email.com"
-          />
-          <p id={contactHelpId} className="text-sm text-[#274b3a]/55">
-            Only used to contact you if you win. Kept private.
-          </p>
-          {contactMessage ? (
-            <p id={`${fieldIds.contact}-error`} role="alert" className="text-sm text-destructive">
-              {contactMessage}
-            </p>
-          ) : null}
-        </div>
+        <ContactField
+          id={fieldIds.contact}
+          value={contact}
+          onChange={onContact}
+          onBlur={onContactBlur}
+          error={contactMessage}
+          hint="Only used to contact you if you win. Kept private."
+          hintId={contactHelpId}
+        />
 
         <div className="grid gap-1.5">
           <Label htmlFor={fieldIds.drinkName}>Drink (optional)</Label>
@@ -581,54 +593,15 @@ export function PhotoEntryForm({
           ) : null}
         </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor={fieldIds.email}>Email</Label>
-          <Input
-            id={fieldIds.email}
-            name="email"
-            type="email"
-            inputMode="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            maxLength={254}
-            autoComplete="email"
-            aria-invalid={Boolean(fields.email)}
-            aria-describedby={fields.email ? `${fieldIds.email}-error ${contactHelpId}` : contactHelpId}
-            placeholder="name@email.com"
-            className="h-11"
-          />
-          {fields.email ? (
-            <p id={`${fieldIds.email}-error`} role="alert" className="text-sm text-destructive">
-              {fields.email}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor={fieldIds.phone}>Phone</Label>
-          <Input
-            id={fieldIds.phone}
-            name="phone"
-            type="tel"
-            inputMode="tel"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            maxLength={32}
-            autoComplete="tel"
-            aria-invalid={Boolean(fields.phone)}
-            aria-describedby={fields.phone ? `${fieldIds.phone}-error ${contactHelpId}` : contactHelpId}
-            placeholder="705-555-0199"
-            className="h-11"
-          />
-          <p id={contactHelpId} className="text-sm">
-            Add an email or a phone number. One is enough. We keep it private. It doesn&apos;t show with your photo.
-          </p>
-          {fields.phone ? (
-            <p id={`${fieldIds.phone}-error`} role="alert" className="text-sm text-destructive">
-              {fields.phone}
-            </p>
-          ) : null}
-        </div>
+        <ContactField
+          id={fieldIds.contact}
+          value={contact}
+          onChange={onContact}
+          onBlur={onContactBlur}
+          error={contactMessage}
+          hint="Add an email or a phone number. One is enough. We keep it private. It doesn't show with your photo."
+          hintId={contactHelpId}
+        />
 
         <div className="grid gap-2">
           <Label htmlFor={fieldIds.drinkName}>Drink name (optional)</Label>

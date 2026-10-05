@@ -153,6 +153,18 @@ export function likeRate(voteCount: number, skipCount: number): number | null {
   return voteCount / seen;
 }
 
+/** Rank and the vote gap to second place. A tie on votes has no useful gap. */
+export function standingsFor(ordered: { id: string; voteCount: number }[]): Map<string, { rank: number; votesFromTopTwo: number | null }> {
+  const secondVotes = ordered.length >= 2 ? ordered[1].voteCount : 0;
+  const standings = new Map<string, { rank: number; votesFromTopTwo: number | null }>();
+  ordered.forEach((photo, index) => {
+    const rank = index + 1;
+    const votesFromTopTwo = rank > 2 && secondVotes > photo.voteCount ? secondVotes - photo.voteCount : null;
+    standings.set(photo.id, { rank, votesFromTopTwo });
+  });
+  return standings;
+}
+
 /** Highest vote count first. Equal counts use the higher like percentage. */
 export function compareLeaderboard(
   a: { voteCount: number; skipCount: number },
@@ -466,8 +478,39 @@ export function checkPhotoContact(input: {
 
 const OWNED_PHOTO_LIMIT = 40;
 
-function toOwned(row: EntryRow): OwnedPhoto {
-  return { ...toPublic(row), status: row.status === "approved" ? "approved" : "pending" };
+function boardStandings(): Map<string, { rank: number; votesFromTopTwo: number | null }> {
+  ensureSamplePhotos();
+  const rows = getDb()
+    .prepare(
+      `SELECT
+         e.id,
+         e.created_at,
+         (SELECT COUNT(*) FROM photo_votes v WHERE v.photo_id = e.id) AS vote_count,
+         (SELECT COUNT(*) FROM photo_swipes s WHERE s.photo_id = e.id AND s.action = 'skip') AS skip_count
+       FROM photo_entries e
+       WHERE e.status = 'approved' AND ${sampleVisibilitySql()}`,
+    )
+    .all(sampleVisibilityFlag()) as { id: string; created_at: string; vote_count: number; skip_count: number }[];
+  rows.sort((a, b) => {
+    const score = compareLeaderboard(
+      { voteCount: Number(a.vote_count), skipCount: Number(a.skip_count) },
+      { voteCount: Number(b.vote_count), skipCount: Number(b.skip_count) },
+    );
+    if (score !== 0) return score;
+    if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
+    return a.id < b.id ? -1 : 1;
+  });
+  return standingsFor(rows.map((row) => ({ id: row.id, voteCount: Number(row.vote_count) })));
+}
+
+function toOwned(row: EntryRow, standings: Map<string, { rank: number; votesFromTopTwo: number | null }>): OwnedPhoto {
+  const standing = row.status === "approved" ? standings.get(row.id) : undefined;
+  return {
+    ...toPublic(row),
+    status: row.status === "approved" ? "approved" : "pending",
+    rank: standing?.rank ?? null,
+    votesFromTopTwo: standing?.votesFromTopTwo ?? null,
+  };
 }
 
 /** Photos this browser already saved. Rejected and removed rows stay off the list. */
@@ -483,7 +526,8 @@ export function listOwnedPhotos(ids: readonly string[], voterId: string | null):
        ORDER BY e.created_at DESC`,
     )
     .all(voterId ?? "", ...unique, sampleVisibilityFlag()) as EntryRow[];
-  return rows.map(toOwned);
+  const standings = boardStandings();
+  return rows.map((row) => toOwned(row, standings));
 }
 
 /** Every pending or approved photo for an email or phone. An unknown contact is an empty list. */
@@ -513,7 +557,8 @@ export function findOwnedPhotosByContact(
        LIMIT ${OWNED_PHOTO_LIMIT}`,
     )
     .all(voterId ?? "", ...params, sampleVisibilityFlag()) as EntryRow[];
-  return { ok: true, photos: rows.map(toOwned) };
+  const standings = boardStandings();
+  return { ok: true, photos: rows.map((row) => toOwned(row, standings)) };
 }
 
 export async function submitPhoto(input: {

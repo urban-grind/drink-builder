@@ -1,40 +1,30 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { PhotoShare } from "@/components/photo-share";
+import { ContactField } from "@/components/contact-field";
 import { Button } from "@/components/ui/button";
+import { ownerStandingLine } from "@/lib/photo-standing";
+import { formatStoredPhone, parseTypedContact } from "@/lib/photo-validation";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { firstName, photoEntryPath } from "@/lib/first-name";
 import { rememberMyPhoto } from "@/lib/local-votes";
 import type { OwnedPhoto } from "@/lib/photo-types";
-
-function shortDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
-}
-
-function splitContact(value: string): { email: string; phone: string } {
-  const trimmed = value.trim();
-  if (!trimmed) return { email: "", phone: "" };
-  if (trimmed.includes("@")) return { email: trimmed, phone: "" };
-  return { email: "", phone: trimmed };
-}
 
 export function MyPhotos({
   voterId,
   ids,
   onUpload,
+  onOpen,
 }: {
   voterId: string;
   ids: string[];
   onUpload: () => void;
+  onOpen: (photo: OwnedPhoto) => void;
 }) {
   const contactId = useId();
   const [photos, setPhotos] = useState<OwnedPhoto[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [contact, setContact] = useState("");
+  const [contactError, setContactError] = useState("");
   const [lookup, setLookup] = useState<"idle" | "working" | "empty" | "error">("idle");
   const [lookupError, setLookupError] = useState("");
 
@@ -57,21 +47,36 @@ export function MyPhotos({
     return () => controller.abort();
   }, [voterId, idKey]);
 
-  const selected = photos.find((photo) => photo.id === selectedId) ?? null;
+  function onContact(value: string) {
+    setContact(value);
+    setLookup("idle");
+    if (!contactError) return;
+    const parsed = parseTypedContact(value);
+    setContactError(!value.trim() || parsed.ok ? "" : parsed.message);
+  }
+
+  function onContactBlur() {
+    const parsed = parseTypedContact(contact);
+    if (!contact.trim()) return;
+    if (parsed.ok && parsed.phone) setContact(formatStoredPhone(parsed.phone));
+    setContactError(parsed.ok ? "" : parsed.message);
+  }
 
   async function findPhotos() {
-    const parsed = splitContact(contact);
-    if (!parsed.email && !parsed.phone) {
+    const parsed = parseTypedContact(contact);
+    if (!parsed.ok) {
       setLookup("error");
-      setLookupError("Add an email or a phone number.");
+      setContactError(parsed.message);
+      setLookupError("");
       return;
     }
+    setContactError("");
     setLookup("working");
     setLookupError("");
     try {
       const data = await requestJson<{ photos: OwnedPhoto[] }>("/api/photos/mine", {
         method: "POST",
-        body: JSON.stringify({ voterId, ...parsed }),
+        body: JSON.stringify({ voterId, email: parsed.email ?? "", phone: parsed.phone ?? "" }),
       });
       for (const photo of data.photos) rememberMyPhoto(photo.id);
       setLookup(data.photos.length === 0 ? "empty" : "idle");
@@ -80,40 +85,6 @@ export function MyPhotos({
       setLookup("error");
       setLookupError(caught instanceof ApiRequestError ? caught.message : "Those photos didn't load. Try again.");
     }
-  }
-
-  if (selected) {
-    return (
-      <div className="mx-auto flex w-full max-w-[26rem] flex-col gap-4 px-5 py-4 md:max-w-3xl md:px-10">
-        <button
-          type="button"
-          onClick={() => setSelectedId(null)}
-          className="self-start text-sm font-semibold text-[#274b3a]"
-        >
-          Back to my photos
-        </button>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={selected.imageUrl}
-          alt={selected.drinkName}
-          className="w-full rounded-2xl bg-white object-contain shadow-[0_16px_40px_rgb(39_75_58/0.06)]"
-        />
-        <div className="flex flex-col gap-3 rounded-2xl bg-white px-5 py-6 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-          <h1 className="font-heading text-4xl text-balance">{selected.drinkName}</h1>
-          <p>{firstName(selected.personName)}</p>
-          {selected.status === "pending" ? (
-            <p className="text-sm text-[#274b3a]/70">Waiting for approval before it joins the public board. You can still share it.</p>
-          ) : null}
-          {selected.caption ? <p className="text-pretty">{selected.caption}</p> : null}
-          <PhotoShare
-            personName={selected.personName}
-            drinkName={selected.drinkName}
-            photoUrl={selected.imageUrl}
-            entryPath={photoEntryPath(selected.code)}
-          />
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -143,7 +114,7 @@ export function MyPhotos({
             <li key={photo.id}>
               <button
                 type="button"
-                onClick={() => setSelectedId(photo.id)}
+                onClick={() => onOpen(photo)}
                 className="flex w-full items-center gap-3 rounded-2xl bg-white p-2 text-left shadow-[0_10px_24px_rgb(39_75_58/0.05)]"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -151,8 +122,12 @@ export function MyPhotos({
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{photo.drinkName}</span>
                   <span className="mt-0.5 block text-sm text-[#274b3a]/70">
-                    {shortDate(photo.createdAt)}
-                    {photo.status === "pending" ? " · Waiting for approval" : ""}
+                    {ownerStandingLine({
+                      live: photo.status === "approved",
+                      voteCount: photo.voteCount,
+                      rank: photo.rank,
+                      votesFromTopTwo: photo.votesFromTopTwo,
+                    })}
                   </span>
                 </span>
               </button>
@@ -166,29 +141,23 @@ export function MyPhotos({
       ) : null}
 
       <Button type="button" onClick={onUpload} className="h-12 rounded-full bg-[#274b3a] text-[#f3f2ef]">
-        Upload a photo
+        Upload a new photo
       </Button>
 
       <form
-        className="grid gap-2"
+        className="mt-8 grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           void findPhotos();
         }}
       >
-        <label htmlFor={contactId} className="text-sm font-semibold">
-          Don&apos;t see your photos? Sign in with your email or phone number.
-        </label>
-        <input
+        <ContactField
           id={contactId}
-          name="contact"
+          label="Don't see your photos? Sign in with your email or phone number."
           value={contact}
-          onChange={(event) => {
-            setContact(event.target.value);
-            setLookup("idle");
-          }}
-          autoComplete="on"
-          className="h-12 rounded-full border border-[#d5d1c9] bg-white px-4 text-sm"
+          onChange={onContact}
+          onBlur={onContactBlur}
+          error={contactError}
         />
         {lookup === "empty" ? <p className="text-sm text-[#274b3a]/75">No photos for that email or phone.</p> : null}
         {lookup === "error" ? (
