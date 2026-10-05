@@ -154,13 +154,13 @@ function BackToPicks({ onBack }: { onBack?: () => void }) {
   if (onBack) {
     return (
       <button type="button" onClick={onBack} className={className}>
-        ← Top picks
+        ← Leaderboard
       </button>
     );
   }
   return (
     <Link href="/?picks=1" className={className}>
-      ← Top picks
+      ← Leaderboard
     </Link>
   );
 }

@@ -5,6 +5,7 @@ import type { InstagramSize } from "@/lib/instagram-png";
 import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
 import { phoneSharesPng } from "@/lib/share-png";
 import { firstName } from "@/lib/first-name";
+import { photoShareCard } from "@/lib/photo-share-text";
 import { ownerPlaceLine, ownerStandingBanner } from "@/lib/photo-standing";
 export type OwnerEntry = {
   personName: string;
@@ -34,7 +35,7 @@ export function PhotoEntryView({
   votePending = false,
   voteError = null,
   onBack,
-  backLabel = "Top picks",
+  backLabel = "Leaderboard",
   onVote,
   onEnter,
 }: {
@@ -105,10 +106,10 @@ export function PhotoEntryView({
   }
 
   async function shareLink() {
-    const title = mode === "owner" ? "Vote for my Urban Grind photo" : `Vote for ${name}'s Urban Grind photo`;
+    const card = photoShareCard(personName);
     if (typeof navigator.share === "function") {
       try {
-        await navigator.share({ title, text: title, url: href });
+        await navigator.share({ title: card.title, text: card.description, url: href });
         return;
       } catch (error) {
         if (shareWasClosed(error)) return;

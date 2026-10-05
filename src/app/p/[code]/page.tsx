@@ -4,9 +4,6 @@ import { PhotoDeck } from "@/components/photo-deck";
 import { getPublicPhotoByCode } from "@/lib/photos";
 import { photoShareCard, photoShareImagePath, requestOrigin } from "@/lib/photo-share-card";
 
-const fallbackTitle = "Vote";
-const fallbackDescription = "Help this photo win free coffee for a month.";
-
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
   const { code } = await params;
   let photo = null;
@@ -15,7 +12,7 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   } catch {
     photo = null;
   }
-  const card = photo ? photoShareCard(photo.personName, photo.drinkName) : { title: fallbackTitle, description: fallbackDescription };
+  const card = photoShareCard(photo?.personName ?? "");
   const origin = requestOrigin(await headers());
   const image = origin ? `${origin}${photoShareImagePath(code)}` : photoShareImagePath(code);
   const pageUrl = origin ? `${origin}/p/${code}` : `/p/${code}`;

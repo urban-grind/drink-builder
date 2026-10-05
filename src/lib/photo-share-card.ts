@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { firstName } from "@/lib/first-name";
 import { photoImageKey } from "@/lib/photos";
 import { getPhotoStorage } from "@/lib/r2";
 import { localSampleAsset } from "@/lib/sample-photos";
@@ -9,15 +8,7 @@ import { localSampleAsset } from "@/lib/sample-photos";
 const PHOTO_DIR = path.join(process.cwd(), "public", "photos");
 const PREVIEW_LONG_EDGE = 1200;
 
-/** Words iMessage shows above the photo. */
-export function photoShareCard(personName: string, drinkName: string): { title: string; description: string } {
-  const name = firstName(personName) || "this photo";
-  const drink = drinkName.trim();
-  return {
-    title: drink ? `Vote for ${name}'s ${drink}` : `Vote for ${name}`,
-    description: `Help ${name} win free coffee for a month.`,
-  };
-}
+export { photoShareCard } from "@/lib/photo-share-text";
 
 export function photoShareImagePath(code: string): string {
   return `/p/${code}/card.jpg`;

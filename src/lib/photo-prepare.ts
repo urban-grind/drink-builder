@@ -240,7 +240,7 @@ async function runPrepare(uploadId: string): Promise<PrepareResult> {
 }
 
 /**
- * Remembers how the card should be framed and rebuilds the swipe and Top picks copies.
+ * Remembers how the card should be framed and rebuilds the swipe and leaderboard copies.
  * The original file stays whole. A prepare already in flight picks up the new frame.
  */
 export async function saveUploadCrop(uploadId: string, crop: PhotoCrop): Promise<PrepareResult> {

@@ -162,11 +162,11 @@ describe("photo contest", { concurrency: false }, () => {
   });
 
   it("writes the text-message card for a voting link", async () => {
-    assert.deepEqual(photoShareCard("Harper Lee", "Counter break"), {
-      title: "Vote for Harper's Counter break",
-      description: "Help Harper win free coffee for a month.",
+    assert.deepEqual(photoShareCard("Harper Lee"), {
+      title: "Vote for Harper's photo",
+      description: "Help me win free coffee for a month",
     });
-    assert.equal(photoShareCard("Harper", "  ").title, "Vote for Harper");
+    assert.equal(photoShareCard("  ").title, "Vote for this photo");
     assert.equal(photoShareImagePath("doh8ot"), "/p/doh8ot/card.jpg");
     const png = await sharp({
       create: { width: 80, height: 40, channels: 3, background: "#274b3a" },

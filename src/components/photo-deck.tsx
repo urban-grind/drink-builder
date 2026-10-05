@@ -460,9 +460,12 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
                 </h2>
                 <EntryCountdown className="mt-5 flex flex-col items-center md:items-start" />
               </div>
-              <p className="order-4 mx-auto mt-5 max-w-[22rem] text-center text-sm leading-relaxed text-[#274b3a]/80 md:order-none md:mx-0 md:mt-5 md:max-w-lg md:text-left md:text-lg">
-              Snap your Urban Grind drink, upload your photo, and start swiping. Swipe right to vote, left to skip. The two photos with the most votes win free coffee for a month!
-              </p>
+              <div className="order-4 mx-auto mt-5 max-w-[22rem] space-y-3 text-center text-sm leading-relaxed text-[#274b3a]/80 md:order-none md:mx-0 md:mt-5 md:max-w-lg md:text-left md:text-lg">
+                <p>
+                  Snap your Urban Grind drink, upload your photo, and rally your friends to vote! Then join the fun! Swipe right for photos you love, left to skip.
+                </p>
+                <p>The two entries with the most votes on October 23rd win free coffee for a month!</p>
+              </div>
               <div className="order-2 mt-5 flex flex-col items-center gap-3 md:order-none md:mt-8 md:flex-row md:flex-wrap md:items-center">
                 <button
                   type="button"
@@ -748,7 +751,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             createdAt={entered.createdAt}
             entryPath={photoEntryPath(entered.code)}
             live={entered.live}
-            backLabel={enteredFrom === "mine" ? "My entries" : "Top picks"}
+            backLabel={enteredFrom === "mine" ? "My entries" : "Leaderboard"}
             onBack={() => setScreen(enteredFrom === "mine" ? "mine" : "picks")}
           />
         </div>
@@ -760,7 +763,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
           {(
             [
               ["vote", "Vote"],
-              ["picks", "Top Picks"],
+              ["picks", "Leaderboard"],
               ["mine", "My Entries"],
               ["faq", "FAQs"],
             ] as const

@@ -177,7 +177,7 @@ export function compareLeaderboard(
 /** How many top photos one request returns when the caller does not ask for a page. */
 export const LEADERBOARD_LIMIT = 20;
 
-/** How many top picks the phone asks for as the list scrolls. */
+/** How many leaderboard photos the phone asks for as the list scrolls. */
 export const LEADERBOARD_PAGE_SIZE = 4;
 
 const LEADERBOARD_MAX_PAGE = 24;
@@ -191,7 +191,7 @@ function pageBound(value: number | undefined, fallback: number, max: number): nu
 }
 
 /**
- * One page of top picks. Pending, rejected, and removed photos stay off this list.
+ * One page of the leaderboard. Pending, rejected, and removed photos stay off this list.
  * Samples stay off in production. The order is stable so later pages do not repeat a photo.
  */
 export function listPhotoLeaderboard(options?: { offset?: number; limit?: number }): {

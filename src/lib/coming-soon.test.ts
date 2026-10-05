@@ -64,6 +64,6 @@ describe("coming soon gate", () => {
     assert.match(html, /7:00 p\.m\. Eastern/);
     assert.match(html, new RegExp(`data-opens="${COMING_SOON_AT}"`));
     assert.equal(html.includes("/api/photos"), false);
-    assert.equal(html.includes("Top picks"), false);
+    assert.equal(html.includes("Leaderboard"), false);
   });
 });

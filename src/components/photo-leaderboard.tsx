@@ -135,7 +135,7 @@ export function PhotoLeaderboard({
       .catch((caught) => {
         if (controller.signal.aborted || gen !== generation.current) return;
         setStatus("error");
-        setError(caught instanceof ApiRequestError ? caught.message : "The top picks didn't load.");
+        setError(caught instanceof ApiRequestError ? caught.message : "The leaderboard didn't load.");
       });
     return () => controller.abort();
   }, [reloadKey, revision]);
@@ -214,7 +214,7 @@ export function PhotoLeaderboard({
   return (
     <div className="pt-1">
       <div className="text-center">
-        <h1 className="font-heading text-[2.35rem] leading-none tracking-wide text-[#274b3a] uppercase">Top picks.</h1>
+        <h1 className="font-heading text-[2.35rem] leading-none tracking-wide text-[#274b3a] uppercase">Leaderboard.</h1>
         <p className="mx-auto mt-3 max-w-sm text-sm leading-snug text-balance text-[#274b3a]/80">
           Help choose who wins free coffee for a month.
         </p>
@@ -233,7 +233,7 @@ export function PhotoLeaderboard({
 
       {status === "loading" ? (
         <div role="status" className="mt-4">
-          <p className="sr-only">Loading top picks</p>
+          <p className="sr-only">Loading leaderboard</p>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             <div className="aspect-square animate-pulse rounded-[1.15rem] bg-[#e7e4de]" />
             <div className="aspect-square animate-pulse rounded-[1.15rem] bg-[#e7e4de]" />
