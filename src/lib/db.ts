@@ -168,9 +168,11 @@ function ensurePhotoTables(db: DatabaseSync): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_photo_entries_status ON photo_entries (status, created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_public_code ON photo_entries (public_code);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_email
+    DROP INDEX IF EXISTS idx_photo_entries_email;
+    DROP INDEX IF EXISTS idx_photo_entries_phone;
+    CREATE INDEX IF NOT EXISTS idx_photo_entries_email
       ON photo_entries (lower(email)) WHERE email IS NOT NULL;
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_photo_entries_phone
+    CREATE INDEX IF NOT EXISTS idx_photo_entries_phone
       ON photo_entries (phone) WHERE phone IS NOT NULL;
   `);
 }
@@ -189,7 +191,7 @@ function ensureUploadPrepareColumns(db: DatabaseSync): void {
 
 /**
  * Older tables required a unique email and had no phone column.
- * Email and phone are both optional, and each one that is present stays unique.
+ * Email and phone are both optional. The same contact can enter more than once.
  */
 function ensurePhotoContacts(db: DatabaseSync): void {
   const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PhotoDetail } from "@/components/photo-detail";
+import { PhotoDeck } from "@/components/photo-deck";
 
 export const metadata: Metadata = {
   title: "Photo",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 
 export default async function ShortPhotoPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  return <PhotoDetail key={code} code={code} />;
+  return <PhotoDeck entryCode={code} />;
 }

@@ -4,13 +4,8 @@ import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
 import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib/sample-photos";
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage } from "@/lib/r2";
-import type { LeaderboardEntry, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
-import {
-  EMAIL_ALREADY_ENTERED,
-  PHONE_ALREADY_ENTERED,
-  parsePhotoContact,
-  validatePhotoEntry,
-} from "@/lib/photo-validation";
+import type { LeaderboardEntry, OwnedPhoto, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
+import { parsePhotoContact, validatePhotoEntry } from "@/lib/photo-validation";
 import type { FieldErrors } from "@/lib/types";
 
 export const NEW_PHOTO_LIMIT = 10;
@@ -166,19 +161,38 @@ export function compareLeaderboard(
   return (likeRate(b.voteCount, b.skipCount) ?? -1) - (likeRate(a.voteCount, a.skipCount) ?? -1);
 }
 
-/** How many top photos the leaderboard returns. Thumbs only, not every entry. */
+/** How many top photos one request returns when the caller does not ask for a page. */
 export const LEADERBOARD_LIMIT = 20;
+
+/** How many top picks the phone asks for as the list scrolls. */
+export const LEADERBOARD_PAGE_SIZE = 4;
+
+const LEADERBOARD_MAX_PAGE = 24;
 
 /** How many cards a phone asks for at once. */
 export const DECK_PAGE_SIZE = 5;
 
-/** Top picks. Pending, rejected, and removed photos stay off this list. Samples stay off in production. */
-export function listPhotoLeaderboard(): LeaderboardEntry[] {
+function pageBound(value: number | undefined, fallback: number, max: number): number {
+  if (value === undefined || !Number.isInteger(value) || value < 0) return fallback;
+  return Math.min(value, max);
+}
+
+/**
+ * One page of top picks. Pending, rejected, and removed photos stay off this list.
+ * Samples stay off in production. The order is stable so later pages do not repeat a photo.
+ */
+export function listPhotoLeaderboard(options?: { offset?: number; limit?: number }): {
+  photos: LeaderboardEntry[];
+  hasMore: boolean;
+} {
   ensureSamplePhotos();
+  const limit = pageBound(options?.limit, LEADERBOARD_LIMIT, LEADERBOARD_MAX_PAGE);
+  const offset = pageBound(options?.offset, 0, 10_000);
   const rows = getDb()
     .prepare(
       `SELECT
          e.id,
+         e.public_code,
          e.person_name,
          e.drink_name,
          e.created_at,
@@ -191,11 +205,14 @@ export function listPhotoLeaderboard(): LeaderboardEntry[] {
          CASE
            WHEN vote_count + skip_count = 0 THEN -1.0
            ELSE CAST(vote_count AS REAL) / (vote_count + skip_count)
-         END DESC
-       LIMIT ?`,
+         END DESC,
+         e.created_at DESC,
+         e.id ASC
+       LIMIT ? OFFSET ?`,
     )
-    .all(sampleVisibilityFlag(), LEADERBOARD_LIMIT) as {
+    .all(sampleVisibilityFlag(), limit + 1, offset) as {
     id: string;
+    public_code: string | null;
     person_name: string;
     drink_name: string;
     created_at: string;
@@ -203,24 +220,25 @@ export function listPhotoLeaderboard(): LeaderboardEntry[] {
     vote_count: number;
     skip_count: number;
   }[];
-  return rows
-    .map((row) => {
-      const voteCount = Number(row.vote_count);
-      const skipCount = Number(row.skip_count);
-      const rate = likeRate(voteCount, skipCount);
-      const localThumb = localSampleAsset(row.thumb_key);
-      return {
-        id: row.id,
-        personName: row.person_name,
-        drinkName: row.drink_name,
-        createdAt: row.created_at,
-        thumbUrl: localThumb ?? thumbUrl(row.id),
-        voteCount,
-        skipCount,
-        likePercent: rate === null ? null : Math.round(rate * 100),
-      };
-    })
-    .sort(compareLeaderboard);
+  const hasMore = rows.length > limit;
+  const photos = rows.slice(0, limit).map((row) => {
+    const voteCount = Number(row.vote_count);
+    const skipCount = Number(row.skip_count);
+    const rate = likeRate(voteCount, skipCount);
+    const localThumb = localSampleAsset(row.thumb_key);
+    return {
+      id: row.id,
+      code: row.public_code ?? "",
+      personName: row.person_name,
+      drinkName: row.drink_name,
+      createdAt: row.created_at,
+      thumbUrl: localThumb ?? thumbUrl(row.id),
+      voteCount,
+      skipCount,
+      likePercent: rate === null ? null : Math.round(rate * 100),
+    };
+  });
+  return { photos, hasMore };
 }
 
 /**
@@ -427,37 +445,7 @@ function loadUpload(uploadId: string): UploadRow | undefined {
   return getDb().prepare("SELECT * FROM photo_uploads WHERE id = ?").get(uploadId) as UploadRow | undefined;
 }
 
-function contactInUse(fields: FieldErrors): {
-  ok: false;
-  code: string;
-  message: string;
-  fields: FieldErrors;
-} {
-  const email = Boolean(fields.email);
-  const phone = Boolean(fields.phone);
-  const code = email && phone ? "CONTACT_IN_USE" : email ? "EMAIL_IN_USE" : "PHONE_IN_USE";
-  const message = email ? EMAIL_ALREADY_ENTERED : PHONE_ALREADY_ENTERED;
-  return { ok: false, code, message, fields };
-}
-
-function takenContactFields(
-  db: ReturnType<typeof getDb>,
-  email: string | null,
-  phone: string | null,
-): FieldErrors {
-  const fields: FieldErrors = {};
-  if (email) {
-    const taken = db.prepare("SELECT 1 AS found FROM photo_entries WHERE lower(email) = ?").get(email);
-    if (taken) fields.email = EMAIL_ALREADY_ENTERED;
-  }
-  if (phone) {
-    const taken = db.prepare("SELECT 1 AS found FROM photo_entries WHERE phone = ?").get(phone);
-    if (taken) fields.phone = PHONE_ALREADY_ENTERED;
-  }
-  return fields;
-}
-
-/** Looks up the email and phone before a contest entry is created. */
+/** Checks that an email or phone is usable. The same contact may enter again. */
 export function checkPhotoContact(input: {
   email?: unknown;
   phone?: unknown;
@@ -472,9 +460,59 @@ export function checkPhotoContact(input: {
       fields: contact.fields,
     };
   }
-  const taken = takenContactFields(getDb(), contact.email, contact.phone);
-  if (taken.email || taken.phone) return contactInUse(taken);
   return { ok: true };
+}
+
+const OWNED_PHOTO_LIMIT = 40;
+
+function toOwned(row: EntryRow): OwnedPhoto {
+  return { ...toPublic(row), status: row.status === "approved" ? "approved" : "pending" };
+}
+
+/** Photos this browser already saved. Rejected and removed rows stay off the list. */
+export function listOwnedPhotos(ids: readonly string[], voterId: string | null): OwnedPhoto[] {
+  const unique = [...new Set(ids.filter((id) => isUuid(id)))].slice(0, OWNED_PHOTO_LIMIT);
+  if (unique.length === 0) return [];
+  ensureSamplePhotos();
+  const placeholders = unique.map(() => "?").join(", ");
+  const rows = getDb()
+    .prepare(
+      `${selectEntry}
+       WHERE e.id IN (${placeholders}) AND ${linkedPhotoSql()} AND ${sampleVisibilitySql()}
+       ORDER BY e.created_at DESC`,
+    )
+    .all(voterId ?? "", ...unique, sampleVisibilityFlag()) as EntryRow[];
+  return rows.map(toOwned);
+}
+
+/** Every pending or approved photo for an email or phone. An unknown contact is an empty list. */
+export function findOwnedPhotosByContact(
+  input: { email?: unknown; phone?: unknown },
+  voterId: string | null,
+): { ok: true; photos: OwnedPhoto[] } | { ok: false; code: string; message: string; fields: FieldErrors } {
+  const checked = checkPhotoContact(input);
+  if (!checked.ok) return checked;
+  const contact = parsePhotoContact(input);
+  ensureSamplePhotos();
+  const clauses: string[] = [];
+  const params: string[] = [];
+  if (contact.email) {
+    clauses.push("lower(e.email) = ?");
+    params.push(contact.email);
+  }
+  if (contact.phone) {
+    clauses.push("e.phone = ?");
+    params.push(contact.phone);
+  }
+  const rows = getDb()
+    .prepare(
+      `${selectEntry}
+       WHERE (${clauses.join(" OR ")}) AND ${linkedPhotoSql()} AND ${sampleVisibilitySql()}
+       ORDER BY e.created_at DESC
+       LIMIT ${OWNED_PHOTO_LIMIT}`,
+    )
+    .all(voterId ?? "", ...params, sampleVisibilityFlag()) as EntryRow[];
+  return { ok: true, photos: rows.map(toOwned) };
 }
 
 export async function submitPhoto(input: {
@@ -532,12 +570,6 @@ export async function submitPhoto(input: {
     return { ok: false, code: "UPLOAD_EXPIRED", message: "That upload expired. Choose the photo again." };
   }
 
-  const taken = takenContactFields(getDb(), parsed.value.email, parsed.value.phone);
-  if (taken.email || taken.phone) {
-    await discardUpload(upload.id);
-    return contactInUse(taken);
-  }
-
   const prepared = await prepareUpload(upload.id);
   if (!prepared.ok) return prepared;
 
@@ -556,13 +588,6 @@ export async function submitPhoto(input: {
   const photoId = crypto.randomUUID();
   const db = beginImmediate();
   try {
-    const raced = takenContactFields(db, parsed.value.email, parsed.value.phone);
-    if (raced.email || raced.phone) {
-      db.exec("ROLLBACK");
-      await discardUpload(upload.id);
-      return contactInUse(raced);
-    }
-
     const now = new Date().toISOString();
     const status: "pending" | "approved" = photoReviewBypassed() ? "approved" : "pending";
     const publicCode = takePhotoCode();
@@ -591,16 +616,7 @@ export async function submitPhoto(input: {
   } catch (error) {
     rollbackQuietly();
     if (isUniqueConstraint(error)) {
-      await discardUpload(upload.id);
-      const detail = error instanceof Error ? error.message.toLowerCase() : "";
-      const fields: FieldErrors = {};
-      if (detail.includes("phone")) fields.phone = PHONE_ALREADY_ENTERED;
-      if (detail.includes("email")) fields.email = EMAIL_ALREADY_ENTERED;
-      if (!fields.email && !fields.phone) {
-        if (parsed.value.email) fields.email = EMAIL_ALREADY_ENTERED;
-        if (parsed.value.phone) fields.phone = PHONE_ALREADY_ENTERED;
-      }
-      return contactInUse(fields);
+      return { ok: false, code: "SERVER", message: "That photo didn't go through. Try again." };
     }
     throw error;
   }

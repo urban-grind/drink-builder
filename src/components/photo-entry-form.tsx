@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PhotoShare } from "@/components/photo-share";
+import { PhotoEntryView, type OwnerEntry } from "@/components/photo-entry-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,16 +33,19 @@ export function PhotoEntryForm({
   active = true,
   onFinished,
   onBack,
+  onEntered,
 }: {
   presentation?: "page" | "dialog" | "shell";
   active?: boolean;
   onFinished?: () => void;
   onBack?: () => void;
+  onEntered?: (entry: OwnerEntry) => void;
 }) {
   const router = useRouter();
   const baseId = useId();
   const captionHelpId = useId();
   const contactHelpId = useId();
+  const nameHelpId = useId();
   const fieldIds: Record<string, string> = {
     photo: `${baseId}-file`,
     personName: `${baseId}-name`,
@@ -67,9 +69,8 @@ export function PhotoEntryForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [phase, setPhase] = useState<"finishing" | "saving" | null>(null);
-  const [outcome, setOutcome] = useState<"pending" | "approved" | null>(null);
   const upload = useEarlyPhotoUpload(active);
-  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saved, setSaved] = useState<OwnerEntry | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -179,13 +180,21 @@ export function PhotoEntryForm({
       });
       upload.keep();
       rememberMyPhoto(saved.id);
-      if (saved.status === "approved") {
-        onFinished?.();
-        router.push(photoEntryPath(saved.code || ""));
+      const entry: OwnerEntry = {
+        personName: parsed.value.personName,
+        drinkName: parsed.value.drinkName,
+        photoUrl: `/api/photos/${saved.id}/image?variant=vote`,
+        code: saved.code || "",
+        createdAt: new Date().toISOString(),
+        live: saved.status === "approved",
+      };
+      if (onEntered) {
+        onEntered(entry);
         return;
       }
-      setSavedId(saved.code || "");
-      setOutcome("pending");
+      setSaved(entry);
+      setPending(false);
+      setPhase(null);
     } catch (error) {
       if (error instanceof ApiRequestError) {
         const next = error.fields ?? {};
@@ -212,43 +221,34 @@ export function PhotoEntryForm({
     }
   }
 
-  if (outcome && savedId) {
-    const drink = drinkName.trim() || "Your drink";
+  if (saved) {
     return (
-      <div className="ug-board rounded-2xl bg-white px-5 py-8 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl">Thanks</h1>
-        <p className="mt-3 max-w-lg text-pretty">
-          We&apos;ll put {drink} up after a look. Your contact stays private. This link is yours.
-        </p>
-        <div className="mt-6">
-          <PhotoShare
-            personName={personName}
-            drinkName={drink}
-            photoUrl={preview ?? ""}
-            entryPath={photoEntryPath(savedId)}
-          />
-        </div>
-        {presentation === "shell" && onBack ? (
-          <button type="button" onClick={onBack} className="mt-6 text-sm font-semibold text-[#274b3a]">
-            Back to voting
-          </button>
-        ) : (
-          <Link href="/" className="mt-6 inline-block text-sm underline-offset-4 hover:underline">
-            Back to the photos
-          </Link>
-        )}
-      </div>
+      <PhotoEntryView
+        mode="owner"
+        personName={saved.personName}
+        drinkName={saved.drinkName}
+        photoUrl={saved.photoUrl}
+        voteCount={0}
+        createdAt={saved.createdAt}
+        entryPath={photoEntryPath(saved.code)}
+        live={saved.live}
+        onBack={() => {
+          onFinished?.();
+          if (onBack) onBack();
+          else router.push("/?picks=1");
+        }}
+      />
     );
   }
 
   const buttonLabel =
-    phase === "finishing" ? "Finishing your photo" : pending ? "Your photo is going up" : presentation === "shell" ? "Submit photo" : "Add photo";
+    phase === "finishing" ? "Finishing your photo" : pending ? "Your photo is going up" : presentation === "shell" ? "Enter the contest" : "Add photo";
   const photoMessage = fields.photo || upload.photoError;
   const contactMessage = fields.contact || fields.email || fields.phone;
 
   if (presentation === "shell") {
     return (
-      <form className="flex flex-col gap-4" noValidate aria-busy={pending} onSubmit={onSubmit}>
+      <form className="flex flex-col gap-3" noValidate aria-busy={pending} onSubmit={onSubmit}>
         {uploadsEnabled === false ? (
           <p role="status" className="rounded-2xl bg-white px-4 py-3 text-sm">
             Photo uploads aren&apos;t available right now.
@@ -257,7 +257,7 @@ export function PhotoEntryForm({
 
         <label
           htmlFor={fieldIds.photo}
-          className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#274b3a]/35 bg-white/50 px-4 py-6 text-center"
+          className="flex cursor-pointer flex-col items-center justify-center rounded-[1.4rem] border-2 border-dashed border-[#274b3a]/30 px-5 py-5 text-center"
         >
           <input
             id={fieldIds.photo}
@@ -271,10 +271,14 @@ export function PhotoEntryForm({
           />
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Selected drink" className="mb-3 max-h-40 w-full rounded-xl object-cover" />
-          ) : null}
-          <span className="text-base font-semibold text-[#274b3a]">Choose a photo</span>
-          <span className="mt-1 text-sm text-[#274b3a]/70">Show off your Urban Grind drink.</span>
+            <img src={preview} alt="Selected drink" className="mb-4 max-h-44 w-full rounded-2xl object-cover" />
+          ) : (
+            <PhotoGlyph />
+          )}
+          <span className="mt-3 inline-flex h-11 items-center rounded-full bg-[#274b3a] px-6 text-sm font-semibold text-[#f3f2ef]">
+            Choose a photo
+          </span>
+          <span className="mt-3 text-sm text-[#274b3a]/65">Show off your Urban Grind drink.</span>
         </label>
         {upload.uploading && !pending ? (
           <p role="status" className="text-sm">
@@ -297,9 +301,12 @@ export function PhotoEntryForm({
             maxLength={PHOTO_NAME_MAX}
             autoComplete="name"
             aria-invalid={Boolean(fields.personName)}
-            aria-describedby={fields.personName ? `${fieldIds.personName}-error` : undefined}
+            aria-describedby={fields.personName ? `${fieldIds.personName}-error ${nameHelpId}` : nameHelpId}
             placeholder="e.g. Elena"
           />
+          <p id={nameHelpId} className="text-sm text-[#274b3a]/55">
+            This name appears with your photo.
+          </p>
           {fields.personName ? (
             <p id={`${fieldIds.personName}-error`} role="alert" className="text-sm text-destructive">
               {fields.personName}
@@ -320,8 +327,8 @@ export function PhotoEntryForm({
             aria-describedby={contactMessage ? `${fieldIds.contact}-error ${contactHelpId}` : contactHelpId}
             placeholder="705-555-0199 or name@email.com"
           />
-          <p id={contactHelpId} className="text-sm text-[#274b3a]/70">
-            A phone number or an email is enough. We keep it private.
+          <p id={contactHelpId} className="text-sm text-[#274b3a]/55">
+            Only used to contact you if you win. Kept private.
           </p>
           {contactMessage ? (
             <p id={`${fieldIds.contact}-error`} role="alert" className="text-sm text-destructive">
@@ -331,7 +338,7 @@ export function PhotoEntryForm({
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor={fieldIds.drinkName}>Drink</Label>
+          <Label htmlFor={fieldIds.drinkName}>Drink (optional)</Label>
           <Input
             id={fieldIds.drinkName}
             name="drinkName"
@@ -341,7 +348,7 @@ export function PhotoEntryForm({
             autoComplete="off"
             aria-invalid={Boolean(fields.drinkName)}
             aria-describedby={fields.drinkName ? `${fieldIds.drinkName}-error` : undefined}
-            placeholder="What you ordered"
+            placeholder="What did you order?"
           />
           {fields.drinkName ? (
             <p id={`${fieldIds.drinkName}-error`} role="alert" className="text-sm text-destructive">
@@ -349,8 +356,6 @@ export function PhotoEntryForm({
             </p>
           ) : null}
         </div>
-
-        <p className="text-sm text-[#274b3a]/70">The upload date is added automatically.</p>
 
         {pending ? (
           <p role="status" className="text-sm font-semibold">
@@ -364,11 +369,11 @@ export function PhotoEntryForm({
           </p>
         ) : null}
 
-        <Button type="submit" disabled={pending || uploadsEnabled === false} className="h-12 rounded-full bg-[#274b3a] px-6 text-base text-[#f3f2ef]">
+        <Button type="submit" disabled={pending || uploadsEnabled === false} className="h-12 w-full rounded-full bg-[#274b3a] px-6 text-base font-semibold text-[#f3f2ef]">
           {buttonLabel}
         </Button>
         {onBack ? (
-          <button type="button" onClick={onBack} className="text-sm font-semibold text-[#274b3a]">
+          <button type="button" onClick={onBack} className="self-center text-sm font-semibold text-[#274b3a]">
             Back to voting
           </button>
         ) : null}
@@ -493,7 +498,7 @@ export function PhotoEntryForm({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor={fieldIds.drinkName}>Drink name</Label>
+          <Label htmlFor={fieldIds.drinkName}>Drink name (optional)</Label>
           <Input
             id={fieldIds.drinkName}
             name="drinkName"
@@ -554,5 +559,15 @@ export function PhotoEntryForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function PhotoGlyph() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="h-12 w-12 text-[#274b3a]/35" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="6" y="10" width="36" height="28" rx="4" />
+      <circle cx="17" cy="20" r="3" />
+      <path d="M10 33l8-8a3 3 0 0 1 4 0l12 12" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

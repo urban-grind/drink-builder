@@ -4,6 +4,7 @@ import {
   LEADERBOARD_OPEN_KEY,
   MY_PHOTOS_EVENT,
   MY_PHOTOS_STORAGE_KEY,
+  SWIPE_DEMO_KEY,
   VOTER_STORAGE_KEY,
   VOTES_STORAGE_KEY,
 } from "@/lib/votes";
@@ -70,6 +71,22 @@ export function rememberMyPhoto(id: string) {
   if (ids.includes(id)) return;
   localStorage.setItem(MY_PHOTOS_STORAGE_KEY, JSON.stringify([...ids, id]));
   window.dispatchEvent(new Event(MY_PHOTOS_EVENT));
+}
+
+export function readSwipeDemoSeen(): boolean {
+  try {
+    return localStorage.getItem(SWIPE_DEMO_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function markSwipeDemoSeen() {
+  try {
+    localStorage.setItem(SWIPE_DEMO_KEY, "1");
+  } catch {
+    // Private mode can block storage. The demo still plays this visit.
+  }
 }
 
 export function readLeaderboardOpen(): boolean {

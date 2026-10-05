@@ -79,9 +79,6 @@ export function parsePhotoUploadRequest(
   return { ok: true, contentType, contentLength };
 }
 
-export const EMAIL_ALREADY_ENTERED = "You already entered with that email. Try again.";
-export const PHONE_ALREADY_ENTERED = "You already entered with that number. Try again.";
-
 export type PhotoValidationResult =
   | { ok: true; value: PhotoEntryInput }
   | { ok: false; message: string; fields: FieldErrors };
@@ -148,12 +145,16 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
   const email = contact.email;
   const phone = contact.phone;
 
-  const drinkName = typeof input.drinkName === "string" ? cleanText(input.drinkName) : null;
-  if (!drinkName) fields.drinkName = "Name the drink.";
-  else if (drinkName.length > PHOTO_NAME_MAX) {
-    fields.drinkName = `Keep the drink name to ${PHOTO_NAME_MAX} characters or fewer.`;
-  } else if (hasRudeLanguage(drinkName)) {
-    fields.drinkName = "Please use different wording for the drink name.";
+  let drinkName = "";
+  if (typeof input.drinkName === "string") {
+    drinkName = cleanText(input.drinkName);
+    if (drinkName.length > PHOTO_NAME_MAX) {
+      fields.drinkName = `Keep the drink name to ${PHOTO_NAME_MAX} characters or fewer.`;
+    } else if (drinkName && hasRudeLanguage(drinkName)) {
+      fields.drinkName = "Please use different wording for the drink name.";
+    }
+  } else if (input.drinkName != null) {
+    fields.drinkName = "Name the drink.";
   }
 
   const caption =
@@ -169,7 +170,7 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
     fields.caption = "Please use different wording in the caption.";
   }
 
-  if (Object.keys(fields).length > 0 || !personName || !drinkName || caption === null || (!email && !phone)) {
+  if (Object.keys(fields).length > 0 || !personName || caption === null || (!email && !phone)) {
     const messages = [...new Set(Object.values(fields))];
     return {
       ok: false,

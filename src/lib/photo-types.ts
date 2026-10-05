@@ -14,6 +14,11 @@ export type PublicPhoto = {
   imageUrl: string;
 };
 
+/** A photo this browser saved or recovered. Pending stays visible. Rejected does not. */
+export type OwnedPhoto = PublicPhoto & {
+  status: "pending" | "approved";
+};
+
 export type ReviewPhoto = PublicPhoto & {
   email: string | null;
   phone: string | null;
@@ -23,6 +28,7 @@ export type ReviewPhoto = PublicPhoto & {
 /** A ranked contest photo. likePercent is null until someone votes or skips. */
 export type LeaderboardEntry = {
   id: string;
+  code: string;
   personName: string;
   drinkName: string;
   createdAt: string;

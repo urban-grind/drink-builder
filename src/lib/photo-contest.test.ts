@@ -22,6 +22,8 @@ import {
   listPhotoLeaderboard,
   listReviewPhotos,
   checkPhotoContact,
+  findOwnedPhotosByContact,
+  listOwnedPhotos,
   moderatePhoto,
   submitPhoto,
   swipeDeckPhoto,
@@ -32,6 +34,7 @@ import { discardUpload, prepareUpload, setPrepareHookForTests, voteKeyForUpload 
 import { parsePhotoUploadRequest, validatePhotoEntry } from "@/lib/photo-validation";
 import { RESIZE_LIMIT, withResizeSlot } from "@/lib/resize-queue";
 import { getPhotoStorage, readR2Config, setPhotoStorageForTests, type PhotoStorage } from "@/lib/r2";
+import { developmentSampleCount } from "@/lib/sample-photos";
 
 process.env.DRINK_DB_PATH = path.join(os.tmpdir(), `urban-grind-photos-${process.pid}.sqlite`);
 
@@ -268,6 +271,15 @@ describe("photo contest", { concurrency: false }, () => {
       assert.equal(mixedEmail.value.phone, null);
     }
 
+    const optionalDrink = validatePhotoEntry({
+      personName: "Nia",
+      email: "nia@example.com",
+      drinkName: "  ",
+      caption: "",
+    });
+    assert.equal(optionalDrink.ok, true);
+    if (optionalDrink.ok) assert.equal(optionalDrink.value.drinkName, "");
+
     const heic = parsePhotoUploadRequest({
       contentType: "",
       contentLength: 1000,
@@ -375,7 +387,7 @@ describe("photo contest", { concurrency: false }, () => {
     assert.equal(pendingLink?.personName, "Ada");
     assert.equal(getPublicPhoto(saved.id, null)?.id, saved.id);
     assert.equal(listPhotoDeck("deck-voter").some((photo) => photo.id === saved.id), false);
-    assert.equal(listPhotoLeaderboard().some((photo) => photo.id === saved.id), false);
+    assert.equal(listPhotoLeaderboard().photos.some((photo) => photo.id === saved.id), false);
     assert.equal(swipeDeckPhoto(saved.id, "deck-voter", "vote").ok, false);
     assert.ok(photoImageKey(saved.id, "vote", false));
     const pendingVote = castPhotoVote(saved.id, crypto.randomUUID());
@@ -401,8 +413,9 @@ describe("photo contest", { concurrency: false }, () => {
       drinkName: "Second",
       caption: "",
     });
-    assert.equal(duplicate.ok, false);
-    if (!duplicate.ok) assert.equal(duplicate.code, "EMAIL_IN_USE");
+    assert.equal(duplicate.ok, true);
+    if (duplicate.ok) assert.equal(duplicate.id === saved.id, false);
+    assert.equal(JSON.stringify(listPhotoBoard("voter")).includes("same@example.com"), false);
 
     const rejectedFile = await createUpload({ contentType: "image/jpeg", contentLength: 5 });
     assert.equal(rejectedFile.ok, true);
@@ -483,7 +496,7 @@ describe("photo contest", { concurrency: false }, () => {
       assert.equal(held.status, "pending");
       assert.equal(getPublicPhotoByCode(held.code, null)?.drinkName, "Cortado");
       assert.equal(listPhotoDeck("held-deck").some((photo) => photo.id === held.id), false);
-      assert.equal(listPhotoLeaderboard().some((photo) => photo.id === held.id), false);
+      assert.equal(listPhotoLeaderboard().photos.some((photo) => photo.id === held.id), false);
 
       process.env.PHOTO_SKIP_REVIEW = "true";
       const live = await enter("live@example.com");
@@ -522,18 +535,23 @@ describe("photo contest", { concurrency: false }, () => {
       env.NODE_ENV = "development";
       const first = listPhotoBoard(null);
       const samples = first.popular.filter((photo) => photo.thumbUrl.startsWith("/photos/"));
-      assert.equal(samples.length, 5);
-      assert.equal(new Set(samples.map((photo) => photo.drinkName)).size, 5);
-      assert.equal(new Set(samples.map((photo) => photo.personName)).size, 5);
-      assert.equal(new Set(samples.map((photo) => photo.createdAt)).size, 5);
-      assert.equal(new Set(samples.map((photo) => photo.voteCount)).size, 5);
-      assert.equal(new Set(samples.map((photo) => photo.code)).size, 5);
+      const expected = developmentSampleCount();
+      const curated = samples.filter((photo) =>
+        ["Maya", "Jonah", "Priya", "Sam", "Elena"].includes(photo.personName),
+      );
+      assert.equal(samples.length, expected);
+      assert.equal(curated.length, 5);
+      assert.equal(new Set(curated.map((photo) => photo.drinkName)).size, 5);
+      assert.equal(new Set(curated.map((photo) => photo.personName)).size, 5);
+      assert.equal(new Set(curated.map((photo) => photo.createdAt)).size, 5);
+      assert.equal(new Set(curated.map((photo) => photo.voteCount)).size, 5);
+      assert.equal(new Set(samples.map((photo) => photo.code)).size, expected);
       assert.equal(samples.every((photo) => /^[a-z0-9]{6}$/.test(photo.code)), true);
       assert.equal(JSON.stringify(first).includes("@"), false);
       assert.equal(samples.every((photo) => !photo.thumbUrl.includes("r2")), true);
 
       const again = listPhotoBoard(null).popular.filter((photo) => photo.thumbUrl.startsWith("/photos/"));
-      assert.equal(again.length, 5);
+      assert.equal(again.length, expected);
       assert.deepEqual(
         again.map((photo) => photo.code).sort(),
         samples.map((photo) => photo.code).sort(),
@@ -541,7 +559,7 @@ describe("photo contest", { concurrency: false }, () => {
       const stored = getDb()
         .prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE original_key LIKE 'local-sample/%'")
         .get() as { count: number };
-      assert.equal(stored.count, 5);
+      assert.equal(stored.count, expected);
 
       env.NODE_ENV = "production";
       const hidden = listPhotoBoard(null);
@@ -578,8 +596,9 @@ describe("photo contest", { concurrency: false }, () => {
       env.NODE_ENV = "development";
       const voter = crypto.randomUUID();
       const deck = everyDealtPhoto(voter).filter((photo) => photo.thumbUrl.startsWith("/photos/"));
-      assert.equal(deck.length, 5);
-      assert.equal(new Set(deck.map((photo) => photo.id)).size, 5);
+      const expected = developmentSampleCount();
+      assert.equal(deck.length, expected);
+      assert.equal(new Set(deck.map((photo) => photo.id)).size, expected);
 
       const skipped = deck[0];
       const voted = deck[1];
@@ -663,7 +682,7 @@ describe("photo contest", { concurrency: false }, () => {
       assert.equal(seen.size, 4);
       const dealt = listPhotoDeck(voter);
       assert.equal(dealt.length, 5);
-      assert.equal(listPhotoLeaderboard().length <= 20, true);
+      assert.equal(listPhotoLeaderboard().photos.length <= 20, true);
     } finally {
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
@@ -679,8 +698,19 @@ describe("photo contest", { concurrency: false }, () => {
 
       env.NODE_ENV = "development";
       const voter = crypto.randomUUID();
-      const before = listPhotoLeaderboard().filter((photo) => photo.thumbUrl.startsWith("/photos/"));
-      assert.equal(before.length, 5);
+      const ranked = listPhotoLeaderboard({ limit: 24 });
+      const before = ranked.photos.filter((photo) => photo.thumbUrl.startsWith("/photos/"));
+      assert.equal(before.length, developmentSampleCount());
+      const firstPage = listPhotoLeaderboard({ offset: 0, limit: 4 });
+      const secondPage = listPhotoLeaderboard({ offset: 4, limit: 4 });
+      assert.equal(firstPage.photos.length, 4);
+      assert.equal(firstPage.hasMore, ranked.photos.length > 4);
+      assert.deepEqual(
+        [...firstPage.photos, ...secondPage.photos].map((photo) => photo.id),
+        ranked.photos.slice(0, 8).map((photo) => photo.id),
+      );
+      const seen = new Set([...firstPage.photos, ...secondPage.photos].map((photo) => photo.id));
+      assert.equal(seen.size, firstPage.photos.length + secondPage.photos.length);
       for (let index = 0; index < before.length - 1; index += 1) {
         const current = before[index];
         const next = before[index + 1];
@@ -693,7 +723,7 @@ describe("photo contest", { concurrency: false }, () => {
       const skipped = swipeDeckPhoto(photo.id, voter, "skip");
       assert.equal(skipped.ok, true);
       assert.equal(swipeDeckPhoto(photo.id, voter, "vote").ok, false);
-      const afterSkip = listPhotoLeaderboard().find((entry) => entry.id === photo.id);
+      const afterSkip = listPhotoLeaderboard().photos.find((entry) => entry.id === photo.id);
       assert.ok(afterSkip);
       assert.equal(afterSkip.voteCount, photo.voteCount);
       assert.equal(afterSkip.skipCount, photo.skipCount + 1);
@@ -701,13 +731,13 @@ describe("photo contest", { concurrency: false }, () => {
 
       const undone = undoDeckSwipe(voter, photo.id);
       assert.equal(undone.ok, true);
-      const restored = listPhotoLeaderboard().find((entry) => entry.id === photo.id);
+      const restored = listPhotoLeaderboard().photos.find((entry) => entry.id === photo.id);
       assert.equal(restored?.skipCount, photo.skipCount);
       assert.equal(restored?.voteCount, photo.voteCount);
 
       env.NODE_ENV = "production";
       assert.equal(
-        listPhotoLeaderboard().some((entry) => entry.thumbUrl.startsWith("/photos/")),
+        listPhotoLeaderboard().photos.some((entry) => entry.thumbUrl.startsWith("/photos/")),
         false,
       );
     } finally {
@@ -716,7 +746,7 @@ describe("photo contest", { concurrency: false }, () => {
     }
   });
 
-  it("keeps one photo per email and one photo per phone", async () => {
+  it("allows another photo with the same email or phone", async () => {
     const source = await sharp({
       create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 80, b: 40 } },
     })
@@ -764,15 +794,9 @@ describe("photo contest", { concurrency: false }, () => {
         body: JSON.stringify({ phone: "(705) 555-0199" }),
       }),
     );
-    assert.equal(takenPhone.status, 409);
-    const takenPhoneBody = (await takenPhone.json()) as {
-      error: { message: string; fields: { phone?: string } };
-    };
-    assert.equal(takenPhoneBody.error.message, "You already entered with that number. Try again.");
-    assert.equal(takenPhoneBody.error.fields.phone, "You already entered with that number. Try again.");
+    assert.equal(takenPhone.status, 200);
     const takenDigits = checkPhotoContact({ phone: "7055550199" });
-    assert.equal(takenDigits.ok, false);
-    if (!takenDigits.ok) assert.equal(takenDigits.message, "You already entered with that number. Try again.");
+    assert.equal(takenDigits.ok, true);
     const openPhone = checkPhotoContact({ phone: "416-555-0148" });
     assert.equal(openPhone.ok, true);
     assert.equal(storage.presigns.length, presignsBeforeCheck);
@@ -789,8 +813,9 @@ describe("photo contest", { concurrency: false }, () => {
     assert.equal(phonePublic.includes("phone"), false);
 
     const samePhone = await enter({ phone: "7055550199", drinkName: "Second phone" });
-    assert.equal(samePhone.ok, false);
-    if (!samePhone.ok) assert.equal(samePhone.code, "PHONE_IN_USE");
+    assert.equal(samePhone.ok, true);
+    if (!samePhone.ok) return;
+    assert.equal(samePhone.id === phoneOnly.id, false);
 
     const otherPhone = await enter({ phone: "416-555-0148", drinkName: "Other phone" });
     assert.equal(otherPhone.ok, true);
@@ -811,20 +836,24 @@ describe("photo contest", { concurrency: false }, () => {
         body: JSON.stringify({ email: "CASE@example.com" }),
       }),
     );
-    assert.equal(takenEmail.status, 409);
-    const takenEmailBody = (await takenEmail.json()) as { error: { message: string; fields: { email?: string } } };
-    assert.equal(takenEmailBody.error.message, "You already entered with that email. Try again.");
-    assert.equal(takenEmailBody.error.fields.email, "You already entered with that email. Try again.");
+    assert.equal(takenEmail.status, 200);
     const openEmail = checkPhotoContact({ email: "other.person@example.com" });
     assert.equal(openEmail.ok, true);
     assert.equal(storage.presigns.length, presignsBeforeEmail);
 
     const sameEmail = await enter({ email: "CASE@example.com", drinkName: "Second email" });
-    assert.equal(sameEmail.ok, false);
-    if (!sameEmail.ok) {
-      assert.equal(sameEmail.code, "EMAIL_IN_USE");
-      assert.equal(sameEmail.message, "You already entered with that email. Try again.");
-    }
+    assert.equal(sameEmail.ok, true);
+    if (!sameEmail.ok) return;
+    const recovered = findOwnedPhotosByContact({ email: "case@example.com" }, null);
+    assert.equal(recovered.ok, true);
+    if (!recovered.ok) return;
+    assert.equal(recovered.photos.length, 2);
+    assert.equal(recovered.photos.every((photo) => photo.status === "pending" || photo.status === "approved"), true);
+    assert.equal(JSON.stringify(recovered.photos).includes("case@example.com"), false);
+    const listed = listOwnedPhotos([sameEmail.id, phoneOnly.id], null);
+    assert.equal(listed.length, 2);
+    assert.equal(moderatePhoto(sameEmail.id, "reject").ok, true);
+    assert.equal(listOwnedPhotos([sameEmail.id], null).length, 0);
 
     const otherEmail = await enter({ email: "other.person@example.com", drinkName: "Other email" });
     assert.equal(otherEmail.ok, true);
@@ -901,7 +930,7 @@ describe("photo contest", { concurrency: false }, () => {
       storage.objects.set(uploadKey(duplicate.uploadId), { body: source, contentType: "image/jpeg" });
       const preparedDuplicate = await prepareUpload(duplicate.uploadId);
       assert.equal(preparedDuplicate.ok, true);
-      const rejected = await submitPhoto({
+      const another = await submitPhoto({
         uploadId: duplicate.uploadId,
         personName: "Nia",
         email: "PREPARED@example.com",
@@ -909,17 +938,11 @@ describe("photo contest", { concurrency: false }, () => {
         drinkName: "Duplicate prepared",
         caption: "",
       });
-      assert.equal(rejected.ok, false);
-      if (!rejected.ok) {
-        assert.equal(rejected.code, "EMAIL_IN_USE");
-        assert.equal(rejected.message, "You already entered with that email. Try again.");
-      }
-      assert.equal(storage.objects.has(uploadKey(duplicate.uploadId)), false);
-      assert.equal(storage.objects.has(voteKeyForUpload(duplicate.uploadId)), false);
+      assert.equal(another.ok, true);
       const duplicateEntries = getDb()
         .prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE drink_name = 'Duplicate prepared'")
         .get() as { count: number };
-      assert.equal(Number(duplicateEntries.count), 0);
+      assert.equal(Number(duplicateEntries.count), 1);
     } finally {
       storage.put = originalPut;
       setPrepareHookForTests(null);
@@ -989,13 +1012,15 @@ describe("photo contest", { concurrency: false }, () => {
           id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at
         ) VALUES (?, 'Bea', NULL, '7055550199', 'New cup', '', 'pending', 'original/new', 'image/jpeg', 'vote/new', 'thumb/new', ?)`,
       ).run(second, "2026-09-02T12:00:00.000Z");
-      assert.throws(() => {
-        db.prepare(
-          `INSERT INTO photo_entries (
-            id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at
-          ) VALUES (?, 'Cam', NULL, '7055550199', 'Copy', '', 'pending', 'original/copy', 'image/jpeg', 'vote/copy', 'thumb/copy', ?)`,
-        ).run("22222222-2222-4222-8222-222222222203", "2026-09-03T12:00:00.000Z");
-      });
+      db.prepare(
+        `INSERT INTO photo_entries (
+          id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at
+        ) VALUES (?, 'Cam', NULL, '7055550199', 'Copy', '', 'pending', 'original/copy', 'image/jpeg', 'vote/copy', 'thumb/copy', ?)`,
+      ).run("22222222-2222-4222-8222-222222222203", "2026-09-03T12:00:00.000Z");
+      const copies = db.prepare("SELECT COUNT(*) AS count FROM photo_entries WHERE phone = ?").get("7055550199") as {
+        count: number;
+      };
+      assert.equal(Number(copies.count), 2);
     } finally {
       resetDbForTests();
       fs.rmSync(file, { force: true });

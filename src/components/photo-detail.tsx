@@ -2,22 +2,33 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PhotoShare } from "@/components/photo-share";
-import { PhotoVoteButton } from "@/components/photo-vote-button";
+import { useRouter } from "next/navigation";
+import { PhotoEntryView } from "@/components/photo-entry-view";
 import { useVoter } from "@/components/use-voter";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { firstName, photoEntryPath } from "@/lib/first-name";
+import { photoEntryPath } from "@/lib/first-name";
 import type { PublicPhoto } from "@/lib/photo-types";
-import { formatWhen } from "@/lib/time";
-import { cn } from "@/lib/utils";
 
-export function PhotoDetail({ code }: { code: string }) {
+export function PhotoDetail({
+  code,
+  onBack,
+  onEnter,
+  onUpdated,
+}: {
+  code: string;
+  onBack?: () => void;
+  onEnter?: () => void;
+  onUpdated?: (photo: PublicPhoto) => void;
+}) {
+  const router = useRouter();
   const { voterId, ready } = useVoter();
   const [photo, setPhoto] = useState<PublicPhoto | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [error, setError] = useState("This photo didn't load.");
   const [reloadKey, setReloadKey] = useState(0);
+  const [votePending, setVotePending] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ready || !voterId) return;
@@ -27,7 +38,7 @@ export function PhotoDetail({ code }: { code: string }) {
       .then((data) => {
         setPhoto(data.photo);
         setStatus("ready");
-        document.title = `${data.photo.drinkName} · Urban Grind`;
+        document.title = `Vote for ${data.photo.personName} · Urban Grind`;
       })
       .catch((caught) => {
         if (controller.signal.aborted) return;
@@ -38,36 +49,73 @@ export function PhotoDetail({ code }: { code: string }) {
         setStatus("error");
         setError(caught instanceof Error ? caught.message : "This photo didn't load.");
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      document.title = "Sip. Snap. Swipe. · Urban Grind";
+    };
   }, [code, ready, voterId, reloadKey]);
 
-  if (status === "loading") {
+  function show(next: PublicPhoto) {
+    setPhoto(next);
+    onUpdated?.(next);
+  }
+
+  async function vote() {
+    if (!photo || !voterId || votePending || photo.voted) return;
+    setVoteError(null);
+    setVotePending(true);
+    try {
+      const data = await requestJson<{ photo: PublicPhoto }>(`/api/photos/${photo.id}/vote`, {
+        method: "POST",
+        body: JSON.stringify({ voterId }),
+      });
+      show(data.photo);
+    } catch (caught) {
+      if (caught instanceof ApiRequestError && caught.code === "ALREADY_VOTED") {
+        try {
+          const data = await requestJson<{ photo: PublicPhoto }>(
+            `/api/photos/${photo.id}?voterId=${encodeURIComponent(voterId)}`,
+          );
+          show(data.photo);
+        } catch (refreshError) {
+          setVoteError(refreshError instanceof Error ? refreshError.message : "The vote didn't go through.");
+        }
+      } else {
+        setVoteError(caught instanceof Error ? caught.message : "The vote didn't go through.");
+      }
+    } finally {
+      setVotePending(false);
+    }
+  }
+
+  if (status === "loading" || !ready) {
     return (
-      <div role="status" aria-live="polite" className="ug-board grid gap-6 lg:grid-cols-2">
+      <div role="status" aria-live="polite" className="flex flex-col gap-3">
+        <BackToPicks onBack={onBack} />
         <p className="sr-only">Loading the photo</p>
-        <div className="h-96 animate-pulse rounded-2xl bg-white" />
-        <div className="h-64 animate-pulse rounded-2xl bg-white" />
+        <div className="h-8 w-48 animate-pulse rounded-full bg-white" />
+        <div className="aspect-[4/5] animate-pulse rounded-2xl bg-white" />
+        <div className="h-16 animate-pulse rounded-2xl bg-white" />
       </div>
     );
   }
 
   if (status === "missing") {
     return (
-      <div className="ug-board rounded-2xl bg-white px-6 py-10 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl">That photo isn&apos;t here</h1>
-        <p className="mt-2">The link may be off.</p>
-        <Link href="/" className={cn(buttonVariants(), "mt-4 inline-flex h-11 rounded-full px-4")}>
-          Back to the photos
-        </Link>
+      <div className="rounded-2xl bg-white px-5 py-8 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
+        <BackToPicks onBack={onBack} />
+        <h1 className="font-heading text-3xl uppercase">That photo isn&apos;t here</h1>
+        <p className="mt-2 text-sm text-[#274b3a]/75">The link may be off.</p>
       </div>
     );
   }
 
   if (status === "error" || !photo) {
     return (
-      <div role="alert" className="ug-board rounded-2xl bg-white px-6 py-10 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl">This photo didn&apos;t load</h1>
-        <p className="mt-2">{error}</p>
+      <div role="alert" className="rounded-2xl bg-white px-5 py-8 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
+        <BackToPicks onBack={onBack} />
+        <h1 className="font-heading text-3xl uppercase">This photo didn&apos;t load</h1>
+        <p className="mt-2 text-sm">{error}</p>
         <Button
           type="button"
           onClick={() => {
@@ -83,37 +131,36 @@ export function PhotoDetail({ code }: { code: string }) {
   }
 
   return (
-    <article className="ug-board grid items-start gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photo.imageUrl}
-        alt={`${photo.drinkName} by ${firstName(photo.personName)}`}
-        className="w-full rounded-2xl bg-white object-contain shadow-[0_16px_40px_rgb(39_75_58/0.06)]"
-      />
-      <div className="flex flex-col gap-4 rounded-2xl bg-white px-5 py-6 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-        <h1 className="text-4xl text-balance">{photo.drinkName}</h1>
-        <p>{firstName(photo.personName)}</p>
-        {photo.caption ? <p className="text-pretty">{photo.caption}</p> : null}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm">
-            <span className="ug-display text-3xl leading-none">{photo.voteCount}</span>{" "}
-            {photo.voteCount === 1 ? "vote" : "votes"}
-          </p>
-          <PhotoVoteButton photo={photo} onUpdated={setPhoto} />
-        </div>
-        <PhotoShare
-          personName={photo.personName}
-          drinkName={photo.drinkName}
-          photoUrl={photo.imageUrl}
-          entryPath={photoEntryPath(photo.code)}
-        />
-        <time dateTime={photo.createdAt} className="text-sm">
-          {formatWhen(photo.createdAt)}
-        </time>
-        <Link href="/" className="text-sm underline-offset-4 hover:underline">
-          Back to the photos
-        </Link>
-      </div>
-    </article>
+    <PhotoEntryView
+      mode="visitor"
+      personName={photo.personName}
+      drinkName={photo.drinkName}
+      photoUrl={photo.imageUrl}
+      voteCount={photo.voteCount}
+      createdAt={photo.createdAt}
+      entryPath={photoEntryPath(photo.code)}
+      voted={photo.voted}
+      votePending={votePending}
+      voteError={voteError}
+      onBack={onBack}
+      onVote={() => void vote()}
+      onEnter={onEnter ?? (() => router.push("/?upload=1"))}
+    />
+  );
+}
+
+function BackToPicks({ onBack }: { onBack?: () => void }) {
+  const className = "mb-3 inline-flex items-center text-sm font-semibold text-[#274b3a]";
+  if (onBack) {
+    return (
+      <button type="button" onClick={onBack} className={className}>
+        ← Top picks
+      </button>
+    );
+  }
+  return (
+    <Link href="/?picks=1" className={className}>
+      ← Top picks
+    </Link>
   );
 }

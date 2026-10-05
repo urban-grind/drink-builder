@@ -6,3 +6,4 @@ export const MY_PHOTOS_STORAGE_KEY = "drink-builder-my-photos";
 export const MY_PHOTOS_EVENT = "drink-my-photos";
 export const LEADERBOARD_OPEN_KEY = "drink-builder-leaderboard-open";
 export const LEADERBOARD_OPEN_EVENT = "drink-leaderboard-open";
+export const SWIPE_DEMO_KEY = "drink-builder-swipe-demo";

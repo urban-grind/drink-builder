@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PhotoDetail } from "@/components/photo-detail";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import type { LeaderboardEntry } from "@/lib/photo-types";
+import type { LeaderboardEntry, PublicPhoto } from "@/lib/photo-types";
+
+const PAGE_SIZE = 4;
+
+type LeaderboardPage = {
+  photos: LeaderboardEntry[];
+  hasMore: boolean;
+};
 
 function likeLabel(percent: number | null): string {
   if (percent === null) return "No likes yet";
@@ -14,6 +22,11 @@ function shortDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+}
+
+function pagePath(offset: number): string {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(PAGE_SIZE) });
+  return `/api/photos/leaderboard?${params.toString()}`;
 }
 
 function HeartMark() {
@@ -29,19 +42,35 @@ function PickCard({
   rank,
   yours,
   prominent,
+  onOpen,
 }: {
   photo: LeaderboardEntry;
   rank: number;
   yours: boolean;
   prominent: boolean;
+  onOpen: (code: string) => void;
 }) {
   const date = shortDate(photo.createdAt);
   const name = photo.personName.trim();
   return (
-    <article className={prominent ? "col-span-2 md:col-span-1" : ""}>
-      <div className={`relative overflow-hidden rounded-2xl bg-[#e7e4de] ${prominent ? "aspect-[4/5] md:aspect-[3/4]" : "aspect-[3/4]"}`}>
+    <button
+      type="button"
+      onClick={() => onOpen(photo.code)}
+      disabled={!photo.code}
+      aria-label={yours ? `Your photo, rank ${rank}, ${photo.drinkName}` : `${photo.drinkName}, rank ${rank}`}
+      className={`cursor-pointer border-0 bg-transparent p-0 text-left text-[#274b3a] ${prominent ? "col-span-2 md:col-span-1" : ""}`}
+    >
+      <div
+        className={`relative overflow-hidden rounded-2xl bg-[#e7e4de] ${prominent ? "aspect-[4/5] md:aspect-[3/4]" : "aspect-[3/4]"} ${yours ? "outline outline-[3px] outline-offset-2 outline-[#274b3a]" : ""}`}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo.thumbUrl} alt="" className="h-full w-full object-cover" />
+        <img
+          src={photo.thumbUrl}
+          alt=""
+          loading={rank <= PAGE_SIZE ? "eager" : "lazy"}
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
         <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f2ef] text-sm font-semibold text-[#274b3a]">
           {rank}
         </span>
@@ -59,34 +88,134 @@ function PickCard({
       </p>
       <p className="text-[12px] leading-tight text-[#274b3a]/75">{photo.drinkName}</p>
       {yours ? <p className="text-xs font-semibold text-[#274b3a]">Your photo</p> : null}
-    </article>
+    </button>
   );
 }
 
-export function PhotoLeaderboard({ mine, revision }: { mine: string[]; revision: number }) {
+export function PhotoLeaderboard({
+  mine,
+  revision,
+  onEnter,
+}: {
+  mine: string[];
+  revision: number;
+  onEnter?: () => void;
+}) {
   const [photos, setPhotos] = useState<LeaderboardEntry[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [openCode, setOpenCode] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const photosRef = useRef<LeaderboardEntry[]>([]);
+  const hasMoreRef = useRef(false);
+  const loadingRef = useRef(false);
+  const generation = useRef(0);
   const mineIds = new Set(mine);
+  photosRef.current = photos;
 
   useEffect(() => {
     const controller = new AbortController();
-    requestJson<{ photos: LeaderboardEntry[] }>(`/api/photos/leaderboard?t=${Date.now()}`, {
-      signal: controller.signal,
-    })
+    const gen = generation.current + 1;
+    generation.current = gen;
+    hasMoreRef.current = false;
+    loadingRef.current = false;
+    requestJson<LeaderboardPage>(pagePath(0), { signal: controller.signal })
       .then((data) => {
+        if (gen !== generation.current) return;
+        photosRef.current = data.photos;
+        hasMoreRef.current = data.hasMore;
         setPhotos(data.photos);
+        setHasMore(data.hasMore);
+        setMoreError("");
         setError("");
         setStatus("ready");
       })
       .catch((caught) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || gen !== generation.current) return;
         setStatus("error");
         setError(caught instanceof ApiRequestError ? caught.message : "The top picks didn't load.");
       });
     return () => controller.abort();
   }, [reloadKey, revision]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || status !== "ready" || !hasMore) return;
+    const root = node.closest("[data-scroll-root]");
+    let cancelled = false;
+
+    async function loadMore() {
+      if (cancelled || loadingRef.current || !hasMoreRef.current) return;
+      loadingRef.current = true;
+      setLoadingMore(true);
+      setMoreError("");
+      const gen = generation.current;
+      const offset = photosRef.current.length;
+      try {
+        const data = await requestJson<LeaderboardPage>(pagePath(offset));
+        if (cancelled || gen !== generation.current) return;
+        const seen = new Set(photosRef.current.map((photo) => photo.id));
+        const more = data.photos.filter((photo) => !seen.has(photo.id));
+        if (more.length > 0) {
+          photosRef.current = [...photosRef.current, ...more];
+          setPhotos(photosRef.current);
+        }
+        hasMoreRef.current = data.hasMore && more.length > 0;
+        setHasMore(hasMoreRef.current);
+      } catch (caught) {
+        if (cancelled || gen !== generation.current) return;
+        hasMoreRef.current = false;
+        setHasMore(false);
+        setMoreError(caught instanceof ApiRequestError ? caught.message : "The next photos didn't load.");
+      } finally {
+        loadingRef.current = false;
+        if (!cancelled && gen === generation.current) setLoadingMore(false);
+      }
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+      },
+      { root: root instanceof Element ? root : null, rootMargin: "160px 0px" },
+    );
+    observer.observe(node);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [status, hasMore, photos.length]);
+
+  useEffect(() => {
+    if (!openCode) return;
+    document.querySelector("[data-scroll-root]")?.scrollTo({ top: 0 });
+  }, [openCode]);
+
+  function applyVote(photo: PublicPhoto) {
+    const next = photosRef.current.map((item) => (item.id === photo.id ? { ...item, voteCount: photo.voteCount } : item));
+    photosRef.current = next;
+    setPhotos(next);
+  }
+
+  if (openCode) {
+    return (
+      <div className="pt-1">
+        <PhotoDetail
+          code={openCode}
+          onBack={() => setOpenCode(null)}
+          onEnter={onEnter}
+          onUpdated={(photo) => applyVote(photo)}
+        />
+      </div>
+    );
+  }
+
+  const lead = photos.slice(0, 3);
+  const rest = photos.slice(3);
 
   return (
     <div className="pt-1">
@@ -120,15 +249,46 @@ export function PhotoLeaderboard({ mine, revision }: { mine: string[]; revision:
       {status === "ready" && photos.length > 0 ? (
         <div className="mt-4">
           <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-3 md:gap-5">
-            {photos.slice(0, 3).map((photo, index) => (
-              <PickCard key={photo.id} photo={photo} rank={index + 1} prominent={index === 0} yours={mineIds.has(photo.id)} />
+            {lead.map((photo, index) => (
+              <PickCard key={photo.id} photo={photo} rank={index + 1} prominent={index === 0} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
             ))}
           </div>
-          {photos.length > 3 ? (
+          {rest.length > 0 ? (
             <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 md:mt-8 md:grid-cols-4 md:gap-4">
-              {photos.slice(3).map((photo, index) => (
-                <PickCard key={photo.id} photo={photo} rank={index + 4} prominent={false} yours={mineIds.has(photo.id)} />
+              {rest.map((photo, index) => (
+                <PickCard key={photo.id} photo={photo} rank={index + 4} prominent={false} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
               ))}
+            </div>
+          ) : null}
+          {hasMore ? (
+            <div ref={sentinelRef} className="mt-4 grid grid-cols-2 gap-3" aria-hidden={loadingMore ? undefined : true}>
+              {loadingMore ? (
+                <>
+                  <p className="sr-only" role="status">
+                    Loading more photos
+                  </p>
+                  <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
+                  <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
+                </>
+              ) : (
+                <div className="col-span-2 h-8" />
+              )}
+            </div>
+          ) : null}
+          {moreError ? (
+            <div role="alert" className="py-4 text-center">
+              <p className="text-sm">{moreError}</p>
+              <Button
+                type="button"
+                className="mt-3 h-11 rounded-full bg-[#274b3a] px-5 text-[#f3f2ef]"
+                onClick={() => {
+                  setMoreError("");
+                  hasMoreRef.current = true;
+                  setHasMore(true);
+                }}
+              >
+                Try again
+              </Button>
             </div>
           ) : null}
         </div>

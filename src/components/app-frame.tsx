@@ -6,7 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const swipe = pathname === "/";
+  const swipe = pathname === "/" || pathname === "/terms" || pathname.startsWith("/p/");
 
   if (swipe) {
     return (

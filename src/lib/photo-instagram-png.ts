@@ -5,69 +5,70 @@ import { deliverPng } from "@/lib/share-png";
 const GREEN = "#274b3a";
 const CREAM = "#f7f4ec";
 const WHITE = "#ffffff";
+const LOGO = "/urban-grind-logo.png";
 
-const HEADLINE_LINES = ["VOTE FOR", "MY PHOTO."];
-const SUBHEAD_BEFORE = "Help me win ";
-const SUBHEAD_BOLD = "free coffee";
-const SUBHEAD_AFTER = " for a month.";
-const KICKER = "PHOTO CONTEST";
+/** Visible wordmark width on a 1080-wide card. Tall enough to read, short of the headline. */
+const LOGO_WIDTH: Record<InstagramSize, number> = {
+  square: 460,
+  story: 500,
+};
 
-const canvases: Record<
-  InstagramSize,
-  {
-    width: number;
-    height: number;
-    padX: number;
-    headerTop: number;
-    wordSize: number;
-    kickerSize: number;
-    headlineSize: number;
-    headlineY: number;
-    subheadSize: number;
-    photoTop: number;
-    photoBottom: number;
-    radius: number;
-    footerSize: number;
-    footerY: number;
-    footer: string;
-    pillSize: number;
-  }
-> = {
+type CardLayout = {
+  width: number;
+  height: number;
+  top: number;
+  logoGap: number;
+  kickerSize: number;
+  kickerGap: number;
+  lines: { text: string; size: number; gap: number }[];
+  photoGap: number;
+  photoSize: number;
+  radius: number;
+  nameSize: number;
+  nameGap: number;
+  cta: "pill" | "story";
+  ctaSize: number;
+};
+
+const cards: Record<InstagramSize, CardLayout> = {
   square: {
     width: 1080,
     height: 1080,
-    padX: 68,
-    headerTop: 52,
-    wordSize: 44,
-    kickerSize: 20,
-    headlineSize: 108,
-    headlineY: 268,
-    subheadSize: 32,
-    photoTop: 520,
-    photoBottom: 948,
-    radius: 48,
-    footerSize: 32,
-    footerY: 1014,
-    footer: "Urban Grind Photo Contest",
-    pillSize: 28,
+    top: 40,
+    logoGap: 18,
+    kickerSize: 26,
+    kickerGap: 20,
+    lines: [
+      { text: "HELP ME WIN", size: 92, gap: 6 },
+      { text: "FREE COFFEE FOR A MONTH", size: 46, gap: 24 },
+    ],
+    photoGap: 18,
+    photoSize: 530,
+    radius: 52,
+    nameSize: 32,
+    nameGap: 18,
+    cta: "pill",
+    ctaSize: 36,
   },
   story: {
     width: 1080,
     height: 1920,
-    padX: 72,
-    headerTop: 148,
-    wordSize: 48,
-    kickerSize: 22,
-    headlineSize: 132,
-    headlineY: 400,
-    subheadSize: 38,
-    photoTop: 720,
-    photoBottom: 1408,
-    radius: 56,
-    footerSize: 36,
-    footerY: 1504,
-    footer: "Tap my link to vote.",
-    pillSize: 32,
+    top: 96,
+    logoGap: 40,
+    kickerSize: 30,
+    kickerGap: 44,
+    lines: [
+      { text: "HELP ME WIN", size: 108, gap: 6 },
+      { text: "FREE COFFEE", size: 108, gap: 6 },
+      { text: "FOR A MONTH", size: 86, gap: 48 },
+    ],
+    photoGap: 36,
+    photoSize: 760,
+    radius: 64,
+    nameSize: 36,
+    nameGap: 28,
+    cta: "story",
+    ctaSize: 72,
   },
 };
 
@@ -83,12 +84,6 @@ function loadPicture(src: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error("The photo didn't draw."));
     image.src = src;
   });
-}
-
-function entryLabel(personName: string): string {
-  const name = firstName(personName);
-  if (!name) return "My entry";
-  return `${name}\u2019s entry`;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -117,72 +112,93 @@ function drawCover(
   ctx.save();
   roundRect(ctx, x, y, width, height, radius);
   ctx.clip();
-  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) * 0.62, drawWidth, drawHeight);
   ctx.restore();
 }
 
-function drawSubhead(
-  ctx: CanvasRenderingContext2D,
-  body: string,
-  size: number,
-  y: number,
-  maxWidth: number,
-  canvasWidth: number,
-) {
+function fitSize(ctx: CanvasRenderingContext2D, text: string, weight: number, family: string, size: number, maxWidth: number): number {
   let next = size;
-  const widthOf = (px: number) => {
-    ctx.font = `400 ${px}px ${body}`;
-    const before = ctx.measureText(SUBHEAD_BEFORE).width;
-    const after = ctx.measureText(SUBHEAD_AFTER).width;
-    ctx.font = `700 ${px}px ${body}`;
-    return before + ctx.measureText(SUBHEAD_BOLD).width + after;
-  };
-  while (next > 20 && widthOf(next) > maxWidth) next -= 1;
-  const total = widthOf(next);
-  let x = (canvasWidth - total) / 2;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = GREEN;
-  ctx.font = `400 ${next}px ${body}`;
-  ctx.fillText(SUBHEAD_BEFORE, x, y);
-  x += ctx.measureText(SUBHEAD_BEFORE).width;
-  ctx.font = `700 ${next}px ${body}`;
-  ctx.fillText(SUBHEAD_BOLD, x, y);
-  x += ctx.measureText(SUBHEAD_BOLD).width;
-  ctx.font = `400 ${next}px ${body}`;
-  ctx.fillText(SUBHEAD_AFTER, x, y);
+  while (next > 24) {
+    ctx.font = `${weight} ${next}px ${family}`;
+    if (ctx.measureText(text).width <= maxWidth) return next;
+    next -= 2;
+  }
+  return next;
 }
 
-function drawPill(
-  ctx: CanvasRenderingContext2D,
-  body: string,
-  label: string,
-  centerX: number,
-  centerY: number,
-  size: number,
-  maxWidth: number,
-) {
-  let next = size;
-  ctx.font = `700 ${next}px ${body}`;
-  while (next > 16 && ctx.measureText(label).width + next * 1.6 > maxWidth) {
-    next -= 1;
-    ctx.font = `700 ${next}px ${body}`;
-  }
-  const textWidth = ctx.measureText(label).width;
-  const padX = next * 0.85;
-  const padY = next * 0.48;
-  const width = textWidth + padX * 2;
-  const height = next + padY * 2;
-  const x = centerX - width / 2;
-  const y = centerY - height / 2;
-  ctx.fillStyle = WHITE;
-  roundRect(ctx, x, y, width, height, height / 2);
+function drawHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+  const s = size / 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + s * 0.78);
+  ctx.bezierCurveTo(cx - s * 0.05, cy + s * 0.35, cx - s * 1.08, cy + s * 0.12, cx - s * 1.08, cy - s * 0.32);
+  ctx.bezierCurveTo(cx - s * 1.08, cy - s * 0.92, cx - s * 0.32, cy - s * 1.02, cx, cy - s * 0.38);
+  ctx.bezierCurveTo(cx + s * 0.32, cy - s * 1.02, cx + s * 1.08, cy - s * 0.92, cx + s * 1.08, cy - s * 0.32);
+  ctx.bezierCurveTo(cx + s * 1.08, cy + s * 0.12, cx + s * 0.05, cy + s * 0.35, cx, cy + s * 0.78);
+  ctx.closePath();
   ctx.fill();
+}
+
+function drawVotePill(ctx: CanvasRenderingContext2D, body: string, centerX: number, top: number, size: number) {
+  const label = "VOTE FOR ME";
+  ctx.font = `700 ${size}px ${body}`;
+  ctx.letterSpacing = `${size * 0.04}px`;
+  const textWidth = ctx.measureText(label).width;
+  const heart = size * 0.92;
+  const gap = size * 0.38;
+  const padX = size * 1.05;
+  const height = size * 2.05;
+  const width = padX * 2 + heart + gap + textWidth;
+  const x = centerX - width / 2;
   ctx.fillStyle = GREEN;
-  ctx.textAlign = "center";
+  roundRect(ctx, x, top, width, height, height / 2);
+  ctx.fill();
+  ctx.fillStyle = WHITE;
+  drawHeart(ctx, x + padX + heart / 2, top + height / 2 + size * 0.04, heart);
+  ctx.fillStyle = WHITE;
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.font = `700 ${next}px ${body}`;
-  ctx.fillText(label, centerX, centerY + next * 0.04);
+  ctx.font = `700 ${size}px ${body}`;
+  ctx.fillText(label, x + padX + heart + gap, top + height / 2 + size * 0.04);
+  ctx.letterSpacing = "0px";
+}
+
+function drawStoryCta(ctx: CanvasRenderingContext2D, heading: string, centerX: number, top: number, size: number) {
+  const label = "VOTE FOR ME";
+  const fitted = fitSize(ctx, label, 600, heading, size, 860);
+  ctx.font = `600 ${fitted}px ${heading}`;
+  const textWidth = ctx.measureText(label).width;
+  const heart = fitted * 0.72;
+  const gap = fitted * 0.22;
+  const total = textWidth + gap + heart;
+  const x = centerX - total / 2;
+  ctx.fillStyle = GREEN;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x, top + fitted * 0.55);
+  drawHeart(ctx, x + textWidth + gap + heart / 2, top + fitted * 0.52, heart);
+  drawVoteArrow(ctx, x + textWidth + gap + heart * 0.15, top + fitted * 0.95);
+}
+
+function drawVoteArrow(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.save();
+  ctx.strokeStyle = GREEN;
+  ctx.fillStyle = GREEN;
+  ctx.lineWidth = 8;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.bezierCurveTo(x + 28, y + 10, x + 86, y + 28, x + 62, y + 118);
+  ctx.stroke();
+  const tipX = x + 62;
+  const tipY = y + 118;
+  ctx.beginPath();
+  ctx.moveTo(tipX - 2, tipY + 2);
+  ctx.lineTo(tipX - 30, tipY - 10);
+  ctx.lineTo(tipX - 6, tipY - 32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 /**
@@ -194,7 +210,7 @@ export async function renderPhotoInstagramPng(
   size: InstagramSize,
 ): Promise<Blob> {
   await document.fonts.ready;
-  const layout = canvases[size];
+  const layout = cards[size];
   const canvas = document.createElement("canvas");
   canvas.width = layout.width;
   canvas.height = layout.height;
@@ -204,85 +220,52 @@ export async function renderPhotoInstagramPng(
   const heading = fontFamily(document.querySelector(".font-heading"), "Georgia, serif");
   const body = fontFamily(document.body, "sans-serif");
   await Promise.all([
-    document.fonts.load(`600 ${layout.headlineSize}px ${heading}`),
-    document.fonts.load(`400 ${layout.subheadSize}px ${body}`),
-    document.fonts.load(`700 ${layout.subheadSize}px ${body}`),
+    document.fonts.load(`600 108px ${heading}`),
+    document.fonts.load(`700 ${layout.kickerSize}px ${body}`),
+    document.fonts.load(`400 ${layout.nameSize}px ${body}`),
+    document.fonts.load(`700 ${layout.ctaSize}px ${body}`),
   ]);
-  const image = await loadPicture(photo.photoUrl);
+  const [image, logo] = await Promise.all([loadPicture(photo.photoUrl), loadPicture(LOGO)]);
 
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.fillStyle = CREAM;
   ctx.fillRect(0, 0, layout.width, layout.height);
   ctx.fillStyle = GREEN;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
 
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.letterSpacing = `${layout.wordSize * 0.06}px`;
-  ctx.font = `600 ${layout.wordSize}px ${heading}`;
-  ctx.fillText("URBAN", layout.padX, layout.headerTop);
-  const wordGap = layout.wordSize * 0.9;
-  ctx.fillText("GRIND", layout.padX, layout.headerTop + wordGap);
-  const serifBlock = wordGap + layout.wordSize * 0.72;
-  const coffeeSize = Math.round(layout.wordSize * 0.4);
-  ctx.letterSpacing = `${coffeeSize * 0.34}px`;
-  ctx.font = `700 ${coffeeSize}px ${body}`;
-  ctx.fillText("COFFEE CO.", layout.padX, layout.headerTop + serifBlock + coffeeSize * 0.35);
+  const logoWidth = LOGO_WIDTH[size];
+  const logoHeight = logoWidth * (logo.naturalHeight / logo.naturalWidth);
+  ctx.drawImage(logo, (layout.width - logoWidth) / 2, layout.top, logoWidth, logoHeight);
 
+  let y = layout.top + logoHeight + layout.logoGap;
   ctx.letterSpacing = `${layout.kickerSize * 0.28}px`;
   ctx.font = `700 ${layout.kickerSize}px ${body}`;
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-  ctx.fillText(KICKER, layout.width - layout.padX, layout.headerTop + serifBlock / 2);
+  ctx.fillText("SIP. SNAP. SWIPE.", layout.width / 2, y + layout.kickerSize / 2);
   ctx.letterSpacing = "0px";
+  y += layout.kickerSize + layout.kickerGap;
 
-  let headlineSize = layout.headlineSize;
-  const headlineMax = layout.width - layout.padX * 2;
-  while (headlineSize > 72) {
-    ctx.font = `600 ${headlineSize}px ${heading}`;
-    ctx.letterSpacing = `${headlineSize * 0.025}px`;
-    const widest = Math.max(...HEADLINE_LINES.map((line) => ctx.measureText(line).width));
-    if (widest <= headlineMax) break;
-    headlineSize -= 2;
+  const textMax = layout.width - 96;
+  for (const line of layout.lines) {
+    const fitted = fitSize(ctx, line.text, 600, heading, line.size, textMax);
+    ctx.font = `600 ${fitted}px ${heading}`;
+    ctx.fillText(line.text, layout.width / 2, y + fitted / 2);
+    y += fitted + line.gap;
   }
-  ctx.font = `600 ${headlineSize}px ${heading}`;
-  ctx.letterSpacing = `${headlineSize * 0.025}px`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+
+  const photoX = (layout.width - layout.photoSize) / 2;
+  drawCover(ctx, image, photoX, y, layout.photoSize, layout.photoSize, layout.radius);
+  y += layout.photoSize + layout.photoGap;
+
+  const name = firstName(photo.personName) || "Friend";
+  ctx.font = `400 ${layout.nameSize}px ${body}`;
   ctx.fillStyle = GREEN;
-  const lineGap = headlineSize * 0.92;
-  HEADLINE_LINES.forEach((line, index) => {
-    ctx.fillText(line, layout.width / 2, layout.headlineY + index * lineGap);
-  });
-  ctx.letterSpacing = "0px";
-  drawSubhead(
-    ctx,
-    body,
-    layout.subheadSize,
-    layout.headlineY + lineGap + headlineSize * 0.62 + layout.subheadSize * 0.7,
-    headlineMax,
-    layout.width,
-  );
+  ctx.fillText(name, layout.width / 2, y + layout.nameSize / 2);
+  y += layout.nameSize + layout.nameGap;
 
-  const photoX = layout.padX;
-  const photoY = layout.photoTop;
-  const photoWidth = layout.width - layout.padX * 2;
-  const photoHeight = layout.photoBottom - layout.photoTop;
-  drawCover(ctx, image, photoX, photoY, photoWidth, photoHeight, layout.radius);
-
-  drawPill(
-    ctx,
-    body,
-    entryLabel(photo.personName),
-    photoX + photoWidth / 2,
-    photoY + photoHeight,
-    layout.pillSize,
-    photoWidth * 0.8,
-  );
-
-  ctx.fillStyle = GREEN;
-  ctx.font = `700 ${layout.footerSize}px ${body}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(layout.footer, layout.width / 2, layout.footerY);
+  if (layout.cta === "pill") drawVotePill(ctx, body, layout.width / 2, y, layout.ctaSize);
+  else drawStoryCta(ctx, heading, layout.width / 2, y, layout.ctaSize);
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("The picture didn't save.");
