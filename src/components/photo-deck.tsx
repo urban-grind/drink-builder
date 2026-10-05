@@ -57,7 +57,7 @@ function CardFace({ photo }: { photo: PublicPhoto }) {
         className="pointer-events-none absolute inset-0 h-full w-full object-cover"
       />
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-3.5 pt-16 pb-3.5 text-white">
-        <p className="text-[12px] leading-tight font-medium text-white/90">
+        <p className="text-[15px] leading-tight font-medium text-white/90">
           {name}
           {date ? ` · ${date}` : ""}
         </p>

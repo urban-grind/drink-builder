@@ -19,8 +19,6 @@ function pagePath(offset: number): string {
   return `/api/photos/leaderboard?${params.toString()}`;
 }
 
-const LEADING_RANKS = 2;
-
 function voteLabel(count: number): string {
   return `${count} ${count === 1 ? "vote" : "votes"}`;
 }
@@ -45,10 +43,8 @@ function PickCard({
   onOpen: (code: string) => void;
 }) {
   const name = firstName(photo.personName);
-  const drink = photo.drinkName.trim();
-  const leading = rank <= LEADING_RANKS && photo.voteCount > 0;
   const place = rank === 1 ? "Number one" : rank === 2 ? "Number two" : `Rank ${rank}`;
-  const label = [yours ? "Your photo" : null, place, leading ? "currently leading" : null, name, drink || null, voteLabel(photo.voteCount)]
+  const label = [yours ? "Your photo" : null, place, name, voteLabel(photo.voteCount)]
     .filter(Boolean)
     .join(", ");
   return (
@@ -74,17 +70,15 @@ function PickCard({
           <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f6f1e8] text-sm font-semibold text-[#274b3a] shadow-sm">
             {rank}
           </span>
-          {leading ? (
+          {yours ? (
             <span className="absolute top-2 right-2 rounded-full bg-[#274b3a] px-2 py-1 text-[10px] leading-none font-semibold text-[#f3f2ef]">
-              Currently leading
+              Your photo
             </span>
           ) : null}
         </div>
         <div className="flex items-center justify-between gap-2 px-2.5 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-[15px] leading-tight font-semibold text-[#274b3a]">{name}</p>
-            {drink ? <p className="truncate text-xs leading-tight text-[#274b3a]">{drink}</p> : null}
-            {yours ? <p className="text-xs font-semibold">Your photo</p> : null}
           </div>
           <p className="flex shrink-0 items-center gap-1 text-xs font-semibold">
             <HeartMark />

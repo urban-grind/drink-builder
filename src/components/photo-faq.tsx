@@ -11,7 +11,7 @@ const questions = [
   },
   {
     question: "How do I enter?",
-    answer: "Tap + Upload. Add your name, a photo of your Urban Grind drink, and a phone number or email. You can enter up to 20 photos.",
+    answer: "Tap + Enter. Add your name, a photo, and a phone number or email. You can enter up to 20 photos.",
   },
   {
     question: "What can I win?",

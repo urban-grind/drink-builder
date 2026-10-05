@@ -186,7 +186,7 @@ export function PhotoEntryForm({
     if (pending) return;
 
     const nextFields: FieldErrors = {};
-    if (!file) nextFields.photo = "Choose a photo of the drink.";
+    if (!file) nextFields.photo = "Choose a photo.";
     else if (file.size > PHOTO_MAX_BYTES) nextFields.photo = "That photo is over 25MB. Use a smaller one.";
     else if (!normalizePhotoType(file.type, file.name)) {
       nextFields.photo = "Use a JPEG, PNG, WebP, or HEIC photo.";
@@ -389,7 +389,7 @@ export function PhotoEntryForm({
           {entryStep === "photo" ? (
             <>
               <PhotoGlyph />
-              <span className="mt-3 text-sm text-[#274b3a]/75">Add a photo of your drink.</span>
+              <span className="mt-3 text-sm text-[#274b3a]/75">Add a photo.</span>
               <span className="mt-3 inline-flex h-11 items-center rounded-full bg-[#274b3a] px-6 text-sm font-semibold text-[#f3f2ef]">
                 Choose a photo
               </span>
@@ -468,7 +468,7 @@ export function PhotoEntryForm({
         />
 
         <div className="grid gap-1.5">
-          <Label htmlFor={fieldIds.drinkName}>Drink (optional)</Label>
+          <Label htmlFor={fieldIds.drinkName}>Caption your photo (not required)</Label>
           <Input
             id={fieldIds.drinkName}
             name="drinkName"
@@ -478,7 +478,7 @@ export function PhotoEntryForm({
             autoComplete="off"
             aria-invalid={Boolean(fields.drinkName)}
             aria-describedby={fields.drinkName ? `${fieldIds.drinkName}-error` : undefined}
-            placeholder="What did you order?"
+            placeholder="Write a caption"
           />
           {fields.drinkName ? (
             <p id={`${fieldIds.drinkName}-error`} role="alert" className="text-sm text-destructive">
@@ -604,7 +604,7 @@ export function PhotoEntryForm({
         />
 
         <div className="grid gap-2">
-          <Label htmlFor={fieldIds.drinkName}>Drink name (optional)</Label>
+          <Label htmlFor={fieldIds.drinkName}>Caption your photo (not required)</Label>
           <Input
             id={fieldIds.drinkName}
             name="drinkName"
@@ -614,7 +614,7 @@ export function PhotoEntryForm({
             autoComplete="off"
             aria-invalid={Boolean(fields.drinkName)}
             aria-describedby={fields.drinkName ? `${fieldIds.drinkName}-error` : undefined}
-            placeholder="What you ordered"
+            placeholder="Write a caption"
             className="h-11"
           />
           {fields.drinkName ? (
