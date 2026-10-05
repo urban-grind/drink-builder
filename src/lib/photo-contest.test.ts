@@ -31,6 +31,7 @@ import {
   undoDeckSwipe,
 } from "@/lib/photos";
 import { firstName, photoEntryPath } from "@/lib/first-name";
+import { photoShareCard, photoShareImagePath, previewJpeg } from "@/lib/photo-share-card";
 import { discardUpload, prepareUpload, setPrepareHookForTests, voteKeyForUpload } from "@/lib/photo-prepare";
 import { coverCrop } from "@/lib/photo-crop";
 import { parsePhotoUploadRequest, parseTypedContact, termsAgreementError, validatePhotoEntry } from "@/lib/photo-validation";
@@ -158,6 +159,25 @@ describe("photo contest", { concurrency: false }, () => {
     assert.equal(firstName("Barrie Smith"), "Barrie");
     assert.equal(firstName("  Ada  "), "Ada");
     assert.equal(photoEntryPath("ab12cd"), "/p/ab12cd");
+  });
+
+  it("writes the text-message card for a voting link", async () => {
+    assert.deepEqual(photoShareCard("Harper Lee", "Counter break"), {
+      title: "Vote for Harper's Counter break",
+      description: "Help Harper win free coffee for a month.",
+    });
+    assert.equal(photoShareCard("Harper", "  ").title, "Vote for Harper");
+    assert.equal(photoShareImagePath("doh8ot"), "/p/doh8ot/card.jpg");
+    const png = await sharp({
+      create: { width: 80, height: 40, channels: 3, background: "#274b3a" },
+    })
+      .png()
+      .toBuffer();
+    const card = await previewJpeg(png);
+    assert.equal(card.jpeg[0], 0xff);
+    assert.equal(card.jpeg[1], 0xd8);
+    assert.equal(card.width, 80);
+    assert.equal(card.height, 40);
   });
 
   it("queues resizes so only two run at once", async () => {
