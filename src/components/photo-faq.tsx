@@ -2,32 +2,57 @@ import Link from "next/link";
 
 const questions = [
   {
-    question: "How do I vote?",
-    answer: "Swipe a photo right, or tap Vote. Swipe left, or tap Skip, to pass. There is no limit on how many photos you can vote for.",
-  },
-  {
-    question: "Can I undo?",
-    answer: "Undo brings back the last photo you swiped. A vote on someone's photo page stays.",
-  },
-  {
     question: "How do I enter?",
-    answer: "Tap + Enter. Add your name, a photo, and a phone number or email. You can enter up to 20 photos.",
+    answer: "Tap + Enter. Add your name, a photo, and a phone number or email. A caption is optional. You can enter up to 20 photos.",
   },
   {
-    question: "What can I win?",
-    answer: "One drink, any size and type, on each day Urban Grind is open in November.",
+    question: "What photo can I enter?",
+    answer: "A drink in an Urban Grind cup, or in your own mug or glass. Don't use another café's branded cup. Use a photo you took yourself.",
+  },
+  {
+    question: "Do I have to buy a drink?",
+    answer: "No. A homemade drink in your own cup is fine.",
   },
   {
     question: "When does my photo show up?",
-    answer: "We take a look first. You can share your link right away. It joins the deck once it's up.",
+    answer: "We review it first. You can share your link right away. It joins the swipe deck and the leaderboard once it's approved.",
+  },
+  {
+    question: "How do friends vote for me?",
+    answer: "Open your photo and share the link. Friends tap it and vote. They don't need an account.",
+  },
+  {
+    question: "How do I vote?",
+    answer: "Swipe a photo right, or tap Vote. Swipe left, or tap Skip, to pass.",
+  },
+  {
+    question: "Can I vote for the same photo twice?",
+    answer: "Once per photo. You can vote for as many different photos as you like.",
+  },
+  {
+    question: "Can I undo?",
+    answer: "Undo brings back the last photo you swiped. A vote on a photo's page is final.",
+  },
+  {
+    question: "Where do I see who's ahead?",
+    answer: "Open Leaderboard. Photos are ranked by votes.",
+  },
+  {
+    question: "What can I win?",
+    answer: "Two photos win. Each prize is one drink, any size and type, on each day Urban Grind is open in November.",
+  },
+  {
+    question: "When does it end?",
+    answer:
+      "Entries close Monday, October 19, 2026, at midnight Eastern. Voting closes Friday, October 23, 2026, at 11:59 p.m. Eastern.",
   },
   {
     question: "Who sees my email or phone?",
-    answer: "It stays off your photo. We use it to reach you if you win, and so you can find your photos on another phone.",
+    answer: "It stays off your photo. We use it to reach you if you win, and so you can find your entries on another phone.",
   },
   {
-    question: "How do I find my photos later?",
-    answer: "Open My Entries. On another phone, enter the same email or phone you used.",
+    question: "How do I find my entries later?",
+    answer: "Open My Entries. On another phone, sign in with the same email or phone you used.",
   },
 ] as const;
 
