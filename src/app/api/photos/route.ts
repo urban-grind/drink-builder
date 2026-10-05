@@ -1,5 +1,7 @@
 import { jsonError, jsonOk } from "@/lib/api";
+import { parsePhotoCrop } from "@/lib/photo-crop";
 import { readPhotoJson } from "@/lib/photo-http";
+import { termsAgreementError } from "@/lib/photo-validation";
 import { photosConfigured } from "@/lib/r2";
 import { listPhotoBoard, submitPhoto } from "@/lib/photos";
 import { parseVoterId } from "@/lib/validation";
@@ -44,6 +46,17 @@ export async function POST(request: Request) {
       photo: "Choose a photo and try again.",
     });
   }
+  const terms = termsAgreementError(record);
+  if (terms) {
+    return jsonError(400, "VALIDATION", terms, { terms });
+  }
+  const cropValue = valueOf(record, "crop");
+  const crop = cropValue == null ? null : parsePhotoCrop(cropValue);
+  if (cropValue != null && !crop) {
+    return jsonError(400, "VALIDATION", "Frame the photo and try again.", {
+      photo: "Frame the photo and try again.",
+    });
+  }
 
   try {
     const result = await submitPhoto({
@@ -53,6 +66,7 @@ export async function POST(request: Request) {
       phone: valueOf(record, "phone"),
       drinkName: valueOf(record, "drinkName"),
       caption: valueOf(record, "caption"),
+      crop,
     });
     if (!result.ok) {
       const status =

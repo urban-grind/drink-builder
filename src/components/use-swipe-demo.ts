@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
-import { markSwipeDemoSeen, readSwipeDemoSeen } from "@/lib/local-votes";
 
 const PEAK = 108;
 
@@ -14,8 +13,8 @@ function easeInOut(t: number) {
 }
 
 /**
- * Nudges the top card right, then left, the first time someone opens the deck.
- * A real drag or vote cancels it and remembers that they no longer need the demo.
+ * Nudges the top card right, then left, each time the vote screen is shown.
+ * A real drag or vote cancels that visit's demo.
  */
 export function useSwipeDemo(
   enabled: boolean,
@@ -30,7 +29,6 @@ export function useSwipeDemo(
   useEffect(() => {
     if (!enabled) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (readSwipeDemoSeen()) return;
 
     let cancelled = false;
     let frame = 0;
@@ -41,10 +39,7 @@ export function useSwipeDemo(
       window.cancelAnimationFrame(frame);
       for (const timer of timers) window.clearTimeout(timer);
       timers.clear();
-      if (takeover) {
-        markSwipeDemoSeen();
-        return;
-      }
+      if (takeover) return;
       setters.current.setDrag(0);
       setters.current.setFlight("rest");
     }
@@ -93,7 +88,6 @@ export function useSwipeDemo(
       if (!(await pause(360))) return;
       if (!(await glide(-PEAK, 0, 460, easeInOut))) return;
       if (cancelled) return;
-      markSwipeDemoSeen();
       setters.current.setFlight("rest");
     }
 

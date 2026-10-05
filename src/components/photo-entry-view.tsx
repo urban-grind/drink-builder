@@ -5,8 +5,6 @@ import type { InstagramSize } from "@/lib/instagram-png";
 import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
 import { firstName } from "@/lib/first-name";
 import { phoneSharesPng } from "@/lib/share-png";
-import { formatWhen } from "@/lib/time";
-
 export type OwnerEntry = {
   personName: string;
   drinkName: string;
@@ -27,7 +25,6 @@ export function PhotoEntryView({
   drinkName,
   photoUrl,
   voteCount,
-  createdAt,
   entryPath,
   live = true,
   voted = false,
@@ -132,28 +129,77 @@ export function PhotoEntryView({
     mode === "owner"
       ? live
         ? "Your photo is live. Share it to get votes."
-        : "We'll put your photo up after a look. Share it to get votes."
+        : "Waiting for approval before it joins the public board. You can still share it."
       : `Help ${name} win free coffee for a month.`;
   const votes = `${voteCount} ${voteCount === 1 ? "vote" : "votes"}`;
-  const when = uploadedLabel(createdAt);
-
   return (
-    <article className="flex flex-col pb-2">
+    <article className="flex flex-col pb-2 md:min-h-0 md:flex-1">
       {onBack ? (
         <button type="button" onClick={onBack} className="mb-3 inline-flex w-fit items-center gap-1 text-sm font-semibold text-[#274b3a]">
           <Chevron />
           Top picks
         </button>
       ) : null}
-      <h1 className="font-heading text-[1.7rem] leading-none tracking-wide uppercase">{headline}</h1>
-      <p className="mt-2 text-sm text-[#274b3a]/75">{subtitle}</p>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photoUrl}
-        alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
-        className="mt-4 aspect-[4/5] w-full rounded-2xl bg-[#e7e4de] object-cover"
-      />
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_10px_28px_rgb(39_75_58/0.06)]">
+      <h1 className="shrink-0 font-heading text-[1.7rem] leading-none tracking-wide uppercase">{headline}</h1>
+      <p className="mt-2 shrink-0 text-sm text-[#274b3a]/75">{subtitle}</p>
+      <div className="relative mt-4 md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photoUrl}
+          alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
+          className="aspect-[4/5] max-h-[calc(100dvh-22rem)] w-full rounded-2xl bg-[#e7e4de] object-cover md:h-full md:max-h-full md:w-auto md:max-w-full"
+        />
+        {mode === "visitor" ? (
+          <div className="absolute inset-x-3 bottom-3 flex flex-col gap-2 md:hidden">
+            <button
+              type="button"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#274b3a] px-4 text-[15px] font-semibold text-[#f3f2ef] shadow-[0_8px_20px_rgb(0_0_0/0.28)] disabled:opacity-50"
+              disabled={!onVote || votePending || voted}
+              aria-pressed={voted}
+              onClick={onVote}
+            >
+              <Heart />
+              {votePending ? "Saving…" : voted ? "Voted" : "Vote"}
+            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/95 px-3 text-[15px] font-semibold text-[#274b3a] shadow-[0_8px_20px_rgb(0_0_0/0.22)]"
+                onClick={() => void shareLink()}
+              >
+                <ShareArrow />
+                {shareNote ?? "Share"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/95 px-3 text-[15px] font-semibold text-[#274b3a] shadow-[0_8px_20px_rgb(0_0_0/0.22)]"
+                onClick={() => void copyLink()}
+              >
+                {copied ? "Copied" : "Copy link"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-x-3 bottom-3 grid grid-cols-2 gap-2 md:hidden">
+            <button
+              type="button"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#274b3a] px-3 text-[15px] font-semibold text-[#f3f2ef] shadow-[0_8px_20px_rgb(0_0_0/0.28)]"
+              onClick={() => void shareLink()}
+            >
+              <ShareArrow />
+              Share
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/95 px-3 text-[15px] font-semibold text-[#274b3a] shadow-[0_8px_20px_rgb(0_0_0/0.22)]"
+              onClick={() => void copyLink()}
+            >
+              {copied ? "Copied" : "Copy link"}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="mt-3 flex shrink-0 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_10px_28px_rgb(39_75_58/0.06)]">
         <div className="min-w-0">
           <p className="truncate text-lg leading-tight font-bold">{name}</p>
           {drink ? <p className="truncate text-sm text-[#274b3a]/65">{drink}</p> : null}
@@ -165,7 +211,7 @@ export function PhotoEntryView({
       </div>
 
       {mode === "owner" ? (
-        <div className="mt-4 flex flex-col gap-2.5">
+        <div className="mt-4 hidden shrink-0 flex-col gap-2.5 md:flex">
           <button type="button" className={greenButton} onClick={() => void shareLink()}>
             <ShareArrow />
             Share my entry
@@ -184,7 +230,7 @@ export function PhotoEntryView({
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-2.5">
+        <div className="mt-4 hidden shrink-0 flex-col gap-2.5 md:flex">
           <button
             type="button"
             className={greenButton}
@@ -200,16 +246,44 @@ export function PhotoEntryView({
               {voteError}
             </p>
           ) : null}
-          <button type="button" className={outlineButton} onClick={() => void shareLink()}>
-            <ShareArrow />
-            {shareNote ?? "Share this photo"}
-          </button>
-          <div className="pt-1 text-center text-sm text-[#274b3a]/75">
-            <p>Got a great Urban Grind photo?</p>
-            <button type="button" onClick={onEnter} className="mt-1 font-semibold text-[#274b3a] underline underline-offset-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className={outlineButton} onClick={() => void shareLink()}>
+              <ShareArrow />
+              {shareNote ?? "Share"}
+            </button>
+            <button type="button" className={outlineButton} onClick={() => void copyLink()}>
+              {copied ? "Copied" : "Copy link"}
+            </button>
+          </div>
+          <div className="mt-5 text-center text-sm text-[#274b3a]/75">
+            <p>Want your chance to win free coffee for a month?</p>
+            <button type="button" onClick={onEnter} className="mt-2 font-semibold text-[#274b3a] underline underline-offset-2">
               Enter your photo →
             </button>
           </div>
+        </div>
+      )}
+
+      {mode === "visitor" && voteError ? (
+        <p role="alert" className="mt-2 text-center text-sm text-[#8b2e2e] md:hidden">
+          {voteError}
+        </p>
+      ) : null}
+      {mode === "visitor" ? (
+        <div className="mt-6 text-center text-sm text-[#274b3a]/75 md:hidden">
+          <p>Want your chance to win free coffee for a month?</p>
+          <button type="button" onClick={onEnter} className="mt-2 font-semibold text-[#274b3a] underline underline-offset-2">
+            Enter your photo →
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-2 md:hidden">
+          <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("story")}>
+            {download === "story" ? "Saving…" : "Download story"}
+          </button>
+          <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("square")}>
+            {download === "square" ? "Saving…" : "Download post"}
+          </button>
         </div>
       )}
 
@@ -227,11 +301,6 @@ export function PhotoEntryView({
           onFocus={(event) => event.currentTarget.select()}
           className="mt-2 h-11 w-full rounded-full border border-[#d5d1c9] bg-white px-4 text-sm"
         />
-      ) : null}
-      {when ? (
-        <p className="mt-4 text-sm text-[#274b3a]/55">
-          <time dateTime={createdAt}>{when}</time>
-        </p>
       ) : null}
     </article>
   );
@@ -256,13 +325,6 @@ function copyWithField(value: string): boolean {
   }
   field.remove();
   return copied;
-}
-
-function uploadedLabel(iso: string): string {
-  const when = formatWhen(iso);
-  if (!when) return "";
-  if (when === "Just now") return "Uploaded just now";
-  return `Uploaded ${when}`;
 }
 
 function shareWasClosed(error: unknown): boolean {

@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { cropKey, parsePhotoCrop, type PhotoCrop } from "@/lib/photo-crop";
 import { contentTypeMatches, detectImageType, makeBoardImages } from "@/lib/photo-image";
 import { withResizeSlot } from "@/lib/resize-queue";
 import { getPhotoStorage, type PhotoStorage } from "@/lib/r2";
@@ -18,6 +19,9 @@ type UploadRow = {
   prepare_status: string | null;
   prepare_error: string | null;
   prepare_generation: number | bigint | null;
+  crop: string | null;
+  crop_version: number | bigint | null;
+  crop_rendered: number | bigint | null;
 };
 
 export type PrepareResult = { ok: true } | { ok: false; code: string; message: string };
@@ -39,12 +43,20 @@ function generationOf(row: UploadRow): number {
   return Number(row.prepare_generation ?? 0);
 }
 
+function cropVersionOf(row: UploadRow): number {
+  return Number(row.crop_version ?? 0);
+}
+
 export function voteKeyForUpload(uploadId: string): string {
   return `board/${uploadId}-vote.webp`;
 }
 
 export function thumbKeyForUpload(uploadId: string): string {
   return `board/${uploadId}-thumb.webp`;
+}
+
+export function previewKeyForUpload(uploadId: string): string {
+  return `board/${uploadId}-preview.webp`;
 }
 
 async function deleteQuietly(storage: PhotoStorage, key: string | null): Promise<void> {
@@ -81,6 +93,7 @@ export async function discardUpload(uploadId: string): Promise<{ ok: true } | Pr
     await deleteQuietly(storage, upload.object_key);
     await deleteQuietly(storage, upload.vote_key ?? voteKeyForUpload(uploadId));
     await deleteQuietly(storage, upload.thumb_key ?? thumbKeyForUpload(uploadId));
+    await deleteQuietly(storage, previewKeyForUpload(uploadId));
   }
   return { ok: true };
 }
@@ -176,40 +189,174 @@ async function runPrepare(uploadId: string): Promise<PrepareResult> {
     });
   }
 
-  const images = await withResizeSlot(() => makeBoardImages(original));
-  if ("error" in images) {
-    return failPrepare(uploadId, generation, storage, row.object_key, voteKey, thumbKey, {
+  let hooked = false;
+  while (true) {
+    const framing = loadUpload(uploadId);
+    if (!framing || framing.prepare_status === "discarded" || generationOf(framing) !== generation) {
+      return replaced();
+    }
+    const version = cropVersionOf(framing);
+    const images = await withResizeSlot(() => makeBoardImages(original, parsePhotoCrop(framing.crop)));
+    if ("error" in images) {
+      return failPrepare(uploadId, generation, storage, row.object_key, voteKey, thumbKey, {
+        ok: false,
+        code: "NOT_AN_IMAGE",
+        message: images.error,
+      });
+    }
+    if (!hooked) {
+      hooked = true;
+      if (prepareHook) await prepareHook();
+    }
+
+    const current = loadUpload(uploadId);
+    if (!current || current.prepare_status === "discarded" || generationOf(current) !== generation) {
+      return replaced();
+    }
+    if (cropVersionOf(current) !== version) continue;
+
+    await storage.put(voteKey, images.vote, "image/webp");
+    await storage.put(thumbKey, images.thumb, "image/webp");
+
+    const saved = getDb()
+      .prepare(
+        `UPDATE photo_uploads
+         SET prepare_status = 'ready', crop_rendered = ?
+         WHERE id = ? AND prepare_status = 'preparing' AND prepare_generation = ? AND crop_version = ?`,
+      )
+      .run(version, uploadId, generation, version);
+    if (changes(saved) > 0) return { ok: true };
+    const again = loadUpload(uploadId);
+    if (!again || again.prepare_status === "discarded" || generationOf(again) !== generation) {
+      await deleteQuietly(storage, voteKey);
+      await deleteQuietly(storage, thumbKey);
+      return replaced();
+    }
+    if (cropVersionOf(again) !== version) continue;
+    await deleteQuietly(storage, voteKey);
+    await deleteQuietly(storage, thumbKey);
+    return replaced();
+  }
+}
+
+/**
+ * Remembers how the card should be framed and rebuilds the swipe and Top picks copies.
+ * The original file stays whole. A prepare already in flight picks up the new frame.
+ */
+export async function saveUploadCrop(uploadId: string, crop: PhotoCrop): Promise<PrepareResult> {
+  if (!isUuid(uploadId)) {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+  const upload = loadUpload(uploadId);
+  if (!upload || upload.consumed_at || upload.prepare_status === "discarded") {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+  if (upload.prepare_status === "failed") {
+    return {
       ok: false,
       code: "NOT_AN_IMAGE",
-      message: images.error,
-    });
+      message: upload.prepare_error || "That photo couldn't be prepared. Try a different image.",
+    };
   }
 
-  if (prepareHook) await prepareHook();
+  const key = cropKey(crop);
+  if (upload.crop !== key) {
+    const saved = getDb()
+      .prepare(
+        `UPDATE photo_uploads
+         SET crop = ?, crop_version = crop_version + 1
+         WHERE id = ? AND consumed_at IS NULL AND COALESCE(prepare_status, '') != 'discarded'`,
+      )
+      .run(key, uploadId);
+    if (changes(saved) === 0) {
+      return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+    }
+  }
+
+  const pending = inflight.get(uploadId);
+  if (pending) await pending;
 
   const current = loadUpload(uploadId);
-  if (!current || current.prepare_status === "discarded" || generationOf(current) !== generation) {
-    await deleteQuietly(storage, voteKey);
-    await deleteQuietly(storage, thumbKey);
-    return replaced();
+  if (!current || current.consumed_at || current.prepare_status === "discarded") {
+    return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+  }
+  if (current.prepare_status !== "ready") return { ok: true };
+  if (current.crop === key && cropVersionOf(current) === Number(current.crop_rendered ?? -1)) return { ok: true };
+  return rerenderReadyCrop(uploadId);
+}
+
+function rerenderReadyCrop(uploadId: string): Promise<PrepareResult> {
+  const existing = inflight.get(uploadId);
+  if (existing) return existing;
+  const task = writeReadyCrop(uploadId).finally(() => {
+    if (inflight.get(uploadId) === task) inflight.delete(uploadId);
+  });
+  inflight.set(uploadId, task);
+  return task;
+}
+
+async function writeReadyCrop(uploadId: string): Promise<PrepareResult> {
+  const storage = getPhotoStorage();
+  if (!storage) {
+    return { ok: false, code: "PHOTOS_UNAVAILABLE", message: "Photo uploads aren't available right now." };
   }
 
-  await storage.put(voteKey, images.vote, "image/webp");
-  await storage.put(thumbKey, images.thumb, "image/webp");
+  while (true) {
+    const row = loadUpload(uploadId);
+    if (!row || row.consumed_at || row.prepare_status === "discarded") {
+      return { ok: false, code: "UPLOAD_NOT_FOUND", message: "That upload wasn't found. Choose the photo again." };
+    }
+    if (row.prepare_status !== "ready") return { ok: true };
+    const version = cropVersionOf(row);
+    if (version === Number(row.crop_rendered ?? -1)) return { ok: true };
 
-  const saved = getDb()
-    .prepare(
-      `UPDATE photo_uploads
-       SET prepare_status = 'ready'
-       WHERE id = ? AND prepare_status = 'preparing' AND prepare_generation = ?`,
-    )
-    .run(uploadId, generation);
-  if (changes(saved) === 0) {
-    await deleteQuietly(storage, voteKey);
-    await deleteQuietly(storage, thumbKey);
-    return replaced();
+    const original = await storage.get(row.object_key);
+    if (!original) {
+      return { ok: false, code: "NOT_AN_IMAGE", message: "That photo didn't arrive. Choose it and try again." };
+    }
+    const images = await withResizeSlot(() => makeBoardImages(original, parsePhotoCrop(row.crop)));
+    if ("error" in images) {
+      return { ok: false, code: "NOT_AN_IMAGE", message: images.error };
+    }
+
+    const current = loadUpload(uploadId);
+    if (!current || current.consumed_at || current.prepare_status !== "ready" || cropVersionOf(current) !== version) {
+      continue;
+    }
+    const voteKey = current.vote_key ?? voteKeyForUpload(uploadId);
+    const thumbKey = current.thumb_key ?? thumbKeyForUpload(uploadId);
+    await storage.put(voteKey, images.vote, "image/webp");
+    await storage.put(thumbKey, images.thumb, "image/webp");
+    const saved = getDb()
+      .prepare(
+        `UPDATE photo_uploads
+         SET crop_rendered = ?
+         WHERE id = ? AND prepare_status = 'ready' AND consumed_at IS NULL AND crop_version = ?`,
+      )
+      .run(version, uploadId, version);
+    if (changes(saved) > 0) return { ok: true };
   }
-  return { ok: true };
+}
+
+/** The upright photo used to frame a crop. It is not replaced when the card copies are cropped. */
+export async function readUploadPreview(uploadId: string): Promise<Buffer | null> {
+  if (!isUuid(uploadId)) return null;
+  const row = loadUpload(uploadId);
+  if (!row || row.consumed_at || row.prepare_status === "discarded" || row.prepare_status === "failed") return null;
+  const storage = getPhotoStorage();
+  if (!storage) return null;
+  const key = previewKeyForUpload(uploadId);
+  const saved = await storage.get(key);
+  if (saved) return saved;
+
+  const original = await storage.get(row.object_key);
+  if (!original) return null;
+  const images = await withResizeSlot(() => makeBoardImages(original, null));
+  if ("error" in images) return null;
+  const current = loadUpload(uploadId);
+  if (!current || current.consumed_at || current.prepare_status === "discarded") return null;
+  await storage.put(key, images.vote, "image/webp");
+  return images.vote;
 }
 
 async function failPrepare(

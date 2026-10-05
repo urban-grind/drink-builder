@@ -102,7 +102,7 @@ export function MyPhotos({
           <h1 className="font-heading text-4xl text-balance">{selected.drinkName}</h1>
           <p>{firstName(selected.personName)}</p>
           {selected.status === "pending" ? (
-            <p className="text-sm text-[#274b3a]/70">Waiting for a look. You can still save the Instagram pictures.</p>
+            <p className="text-sm text-[#274b3a]/70">Waiting for approval before it joins the public board. You can still share it.</p>
           ) : null}
           {selected.caption ? <p className="text-pretty">{selected.caption}</p> : null}
           <PhotoShare
@@ -119,7 +119,7 @@ export function MyPhotos({
   return (
     <div className="mx-auto flex w-full max-w-[26rem] flex-col gap-5 px-5 py-4 md:max-w-xl md:px-10">
       <div>
-        <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">My Photo</h1>
+        <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">My Photos</h1>
         <p className="mt-2 text-center text-sm text-[#274b3a]/75">Photos entered from this phone.</p>
       </div>
 
@@ -152,7 +152,7 @@ export function MyPhotos({
                   <span className="block truncate font-semibold">{photo.drinkName}</span>
                   <span className="mt-0.5 block text-sm text-[#274b3a]/70">
                     {shortDate(photo.createdAt)}
-                    {photo.status === "pending" ? " · Waiting" : ""}
+                    {photo.status === "pending" ? " · Waiting for approval" : ""}
                   </span>
                 </span>
               </button>
@@ -177,7 +177,7 @@ export function MyPhotos({
         }}
       >
         <label htmlFor={contactId} className="text-sm font-semibold">
-          On another phone? Use your email or phone.
+          Don&apos;t see your photos? Sign in with your email or phone number.
         </label>
         <input
           id={contactId}

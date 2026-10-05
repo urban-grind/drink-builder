@@ -27,15 +27,15 @@ const questions = [
   },
   {
     question: "How do I find my photos later?",
-    answer: "Open My Photo. On another phone, enter the same email or phone you used.",
+    answer: "Open My Photos. On another phone, enter the same email or phone you used.",
   },
 ] as const;
 
 export function PhotoFaq() {
   return (
-    <div className="mx-auto flex w-full max-w-[26rem] flex-col px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-xl md:pb-10">
+    <div className="mx-auto flex w-full max-w-[26rem] flex-col px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-xl md:pb-28">
       <h1 className="text-center font-heading text-[1.85rem] leading-none tracking-wide uppercase">FAQ.</h1>
-      <p className="mt-2 text-center text-sm text-[#274b3a]/75">The short version.</p>
+      <p className="mt-2 text-center text-sm text-[#274b3a]/75">How the contest works</p>
       <div className="mt-4 divide-y divide-[#274b3a]/12">
         {questions.map((item) => (
           <details key={item.question} className="group py-3">

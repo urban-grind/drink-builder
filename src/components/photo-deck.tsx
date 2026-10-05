@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { MyPhotos } from "@/components/my-photos";
@@ -8,6 +8,7 @@ import { PhotoDetail } from "@/components/photo-detail";
 import { PhotoFaq } from "@/components/photo-faq";
 import { PhotoEntryForm } from "@/components/photo-entry-form";
 import { PhotoEntryView, type OwnerEntry } from "@/components/photo-entry-view";
+import { EntryCountdown } from "@/components/entry-countdown";
 import { PhotoLeaderboard } from "@/components/photo-leaderboard";
 import { useMyPhotoIds } from "@/components/use-contest-memory";
 import { useSwipeDemo } from "@/components/use-swipe-demo";
@@ -85,8 +86,11 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const myPhotoIds = useMyPhotoIds();
   const photosRef = useRef<PublicPhoto[]>([]);
   const startX = useRef<number | null>(null);
+  const gesture = useRef<{ x: number; y: number; mode: "pending" | "up" | "side" } | null>(null);
   const dragXRef = useRef(0);
   const cardRef = useRef<HTMLDivElement>(null);
+  const pendingSwipeScroll = useRef(false);
+  const arrowSwipe = useRef<number | null>(null);
   const finishRef = useRef<(action: "vote" | "skip") => void>(() => {});
   const canDragRef = useRef(false);
   const setDragRef = useRef<(value: number) => void>(() => {});
@@ -159,7 +163,8 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
           ? "picks"
           : "vote";
   const current = photos[0] ?? null;
-  const behind = photos[1] ?? null;
+  const next = photos[1] ?? null;
+  const deeper = photos[2] ?? null;
   const moving = flight === "drag" ? dragX : flight === "right" ? THRESHOLD : flight === "left" ? -THRESHOLD : dragX;
   const travel = Math.min(1, Math.abs(moving) / THRESHOLD);
   const like = flight === "right" ? 1 : Math.max(0, Math.min(1, dragX / THRESHOLD));
@@ -248,9 +253,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
 
     function onDown(event: PointerEvent) {
       if (event.button !== 0 || !canDragRef.current) return;
-      stopDemoRef.current();
-      startX.current = event.clientX - dragXRef.current;
-      setFlight("drag");
+      gesture.current = { x: event.clientX, y: event.clientY, mode: "pending" };
       try {
         card.setPointerCapture(event.pointerId);
       } catch {
@@ -259,11 +262,36 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     }
 
     function onMove(event: PointerEvent) {
+      const start = gesture.current;
+      if (!start || start.mode === "up") return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (start.mode === "pending") {
+        if (Math.hypot(dx, dy) < 10) return;
+        if (dy < -12 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+          start.mode = "up";
+          return;
+        }
+        start.mode = "side";
+        stopDemoRef.current();
+        startX.current = start.x - dragXRef.current;
+        setFlight("drag");
+      }
       if (startX.current === null) return;
       setDrag(event.clientX - startX.current);
     }
 
-    function onUp() {
+    function onUp(event: PointerEvent) {
+      const start = gesture.current;
+      gesture.current = null;
+      if (start?.mode === "up") {
+        const dx = event.clientX - start.x;
+        const dy = event.clientY - start.y;
+        if (dy <= -64 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
+      }
       if (startX.current === null) return;
       const distance = dragXRef.current;
       startX.current = null;
@@ -314,42 +342,52 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [screen]);
 
-  function goTab(tab: TabId) {
+  function scrollToSwipe() {
+    document.getElementById("swipe")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToIntro() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goTab(tab: TabId, toSwipe = false) {
     if (screen === "entry") {
-      router.push(tab === "vote" ? "/" : `/?${tab}=1`);
+      router.push(toSwipe ? "/#swipe" : tab === "vote" ? "/" : `/?${tab}=1`);
       return;
     }
     if (tab === "vote") {
       if (window.location.search) router.replace("/");
       setScreen("vote");
+      if (toSwipe) {
+        if (screen === "vote") scrollToSwipe();
+        else pendingSwipeScroll.current = true;
+      } else if (screen === "vote") {
+        scrollToIntro();
+      }
       return;
     }
+    pendingSwipeScroll.current = false;
     router.replace(`/?${tab}=1`);
     setScreen(tab);
   }
 
+  useEffect(() => {
+    if (screen !== "vote") return;
+    const fromHash = window.location.hash === "#swipe";
+    if (!pendingSwipeScroll.current && !fromHash) return;
+    pendingSwipeScroll.current = false;
+    scrollToSwipe();
+    if (fromHash) history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  }, [screen]);
+
   return (
-    <div className="relative flex h-dvh w-full flex-col">
-      <header className="shrink-0 border-b border-[#274b3a]/12">
-        <div className="mx-auto flex w-full max-w-[26rem] items-center justify-between gap-4 px-5 pt-4 pb-3.5 md:max-w-6xl md:px-10 md:pt-6">
+    <div className={`relative flex w-full flex-col ${screen === "vote" ? "min-h-dvh" : "h-dvh"}`}>
+      <header className="sticky top-0 z-30 shrink-0 border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-[26rem] items-center justify-between gap-4 px-5 pt-4 pb-3.5 md:max-w-7xl md:px-10 md:pt-6">
         <button type="button" onClick={() => goTab("vote")} className="shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/urban-grind-logo.png" alt="Urban Grind Coffee Co." className="h-11 w-auto" />
         </button>
-        <nav aria-label="Contest" className="hidden items-center gap-1 md:flex">
-          <ScreenTab current={bar === "vote"} onClick={() => goTab("vote")} label="Vote">
-            <TabHeart filled={bar === "vote"} />
-          </ScreenTab>
-          <ScreenTab current={bar === "mine"} onClick={() => goTab("mine")} label="My Photo">
-            <PhotoMark filled={bar === "mine"} />
-          </ScreenTab>
-          <ScreenTab current={bar === "picks"} onClick={() => goTab("picks")} label="Top picks">
-            <TrophyMark />
-          </ScreenTab>
-          <ScreenTab current={bar === "faq"} onClick={() => goTab("faq")} label="FAQ">
-            <FaqMark />
-          </ScreenTab>
-        </nav>
         {screen === "upload" ? (
           <button
             type="button"
@@ -379,22 +417,78 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       </header>
 
       {screen === "vote" ? (
-        <div className="mx-auto flex min-h-0 w-full max-w-[26rem] flex-1 flex-col px-4 pt-3 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:w-[400px] md:max-w-none md:px-0 md:pt-4 md:pb-4">
-          <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase md:text-[1.65rem]">Sip. Snap. Swipe.</h1>
-          <p className="mt-1 text-center text-sm text-[#274b3a]/80 md:mt-2">Swiping that won&apos;t get you in trouble.</p>
+        <div className="mx-auto w-full max-w-[26rem] px-4 md:max-w-7xl md:px-10">
+          <section className="grid grid-cols-1 pt-6 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] md:items-center md:gap-x-20 md:pt-10 md:pb-28">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/contest-snap.jpg"
+              alt="Photographing an Urban Grind cup."
+              className="order-3 mx-auto mt-5 h-[28rem] w-full max-w-[22rem] rounded-[1.35rem] object-cover object-[center_42%] md:order-none md:mt-0 md:h-auto md:max-h-[min(40rem,72vh)] md:w-full md:max-w-none md:justify-self-end md:aspect-[3/4]"
+            />
+            <div className="contents md:flex md:flex-col md:items-start md:justify-center">
+              <div className="order-1 text-center md:order-none md:text-left">
+                <h1 className="font-heading text-[1.75rem] leading-none tracking-wide uppercase md:text-6xl">Sip. Snap. Swipe.</h1>
+                <h2 className="mx-auto mt-4 max-w-[16rem] font-heading text-xl leading-tight md:mx-0 md:mt-5 md:max-w-lg md:text-4xl">
+                  Swiping that won&apos;t get you in trouble.
+                </h2>
+                <EntryCountdown className="mt-5 flex flex-col items-center md:items-start" />
+              </div>
+              <p className="order-4 mx-auto mt-5 max-w-[22rem] text-center text-sm leading-relaxed text-[#274b3a]/80 md:order-none md:mx-0 md:mt-5 md:max-w-lg md:text-left md:text-lg">
+              Snap your Urban Grind drink, upload your photo, and start swiping. Swipe right to vote, left to skip. The two photos with the most votes win free coffee for a month!
+              </p>
+              <div className="order-2 mt-5 flex flex-col items-center gap-3 md:order-none md:mt-8 md:flex-row md:flex-wrap md:items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadBack("vote");
+                    setScreen("upload");
+                  }}
+                  className="inline-flex rounded-full border border-[#274b3a] px-4 py-2 text-[11px] font-bold tracking-[0.12em] text-[#274b3a] uppercase"
+                >
+                  Win free coffee for a month
+                </button>
+                <button
+                  type="button"
+                  onClick={scrollToSwipe}
+                  className="inline-flex rounded-full bg-[#274b3a] px-4 py-2 text-[11px] font-bold tracking-[0.12em] text-[#f3f2ef] uppercase"
+                >
+                  Start swiping
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <div id="swipe" className="flex scroll-mt-24 flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:justify-center md:pb-28">
           <button
             type="button"
-            onClick={() => {
-              setUploadBack("vote");
-              setScreen("upload");
+            aria-label="Back to the top"
+            onClick={scrollToIntro}
+            onPointerDown={(event) => {
+              arrowSwipe.current = event.clientY;
             }}
-            className="mx-auto mt-2 inline-flex rounded-full border border-[#274b3a] px-4 py-1.5 text-[11px] font-bold tracking-[0.12em] text-[#274b3a] uppercase md:mt-3"
+            onPointerUp={(event) => {
+              const start = arrowSwipe.current;
+              arrowSwipe.current = null;
+              if (start !== null && start - event.clientY > 24) scrollToIntro();
+            }}
+            className="mx-auto mb-2 flex h-11 w-11 touch-none items-center justify-center text-[#274b3a]/70"
           >
-            Win free coffee for a month
+            <UpChevron />
           </button>
-          <p className="mt-2 hidden text-center text-[13px] text-[#274b3a]/70 md:block">Upload your photo for a chance to win.</p>
-
-          <div className="relative mx-auto mt-2 min-h-0 w-full flex-1 md:mt-4 md:h-[30rem] md:w-[400px] md:max-w-none md:flex-none">
+          <div className="mt-2 flex w-full items-center justify-center md:gap-10">
+            <div className="hidden shrink-0 flex-col items-center gap-2 md:flex">
+              <button
+                type="button"
+                aria-label="Skip"
+                onClick={() => void finish("skip")}
+                disabled={!current || busy}
+                className="flex h-16 w-16 items-center justify-center rounded-full border border-[#ddd8d0] bg-[#f7f6f3] text-[#274b3a] shadow-sm disabled:opacity-40"
+              >
+                <SkipMark />
+              </button>
+              <span className="text-sm font-medium text-[#274b3a]">Skip</span>
+            </div>
+          <div className="relative mx-auto aspect-[3/4] w-full md:mx-0 md:h-[min(72vh,40rem)] md:w-auto md:max-w-[30rem]">
             <div className="relative h-full w-full">
             {status === "loading" ? (
               <div role="status" className="absolute inset-3">
@@ -422,24 +516,38 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
 
             {status === "ready" && current ? (
               <>
-                {behind ? (
+                {deeper ? (
                   <div
-                    key={behind.id}
-                    className="pointer-events-none absolute inset-x-2 top-0 bottom-4 overflow-hidden rounded-[1.35rem] bg-[#e7e4de] ring-1 ring-[#274b3a]/10"
+                    key={deeper.id}
+                    className="pointer-events-none absolute inset-x-0 top-14 bottom-0 overflow-hidden rounded-[1.35rem] bg-[#e7e4de] shadow-[0_8px_18px_rgb(39_75_58/0.08)] ring-1 ring-[#274b3a]/10"
                     aria-hidden="true"
                     style={{
-                      transform: `scale(${0.985 + 0.015 * travel})`,
+                      transform: `translateY(${-44 + 20 * travel}px) scale(${0.94 + 0.03 * travel})`,
                       transformOrigin: "center top",
                       transition: flight === "drag" || flight === "left" || flight === "right" ? "none" : "transform 420ms cubic-bezier(0.18, 0.9, 0.28, 1)",
                     }}
                   >
-                    <CardFace photo={behind} />
+                    <CardFace photo={deeper} />
+                  </div>
+                ) : null}
+                {next ? (
+                  <div
+                    key={next.id}
+                    className="pointer-events-none absolute inset-x-0 top-14 bottom-0 overflow-hidden rounded-[1.35rem] bg-[#e7e4de] shadow-[0_10px_22px_rgb(39_75_58/0.1)] ring-1 ring-[#274b3a]/10"
+                    aria-hidden="true"
+                    style={{
+                      transform: `translateY(${-24 + 24 * travel}px) scale(${0.97 + 0.03 * travel})`,
+                      transformOrigin: "center top",
+                      transition: flight === "drag" || flight === "left" || flight === "right" ? "none" : "transform 420ms cubic-bezier(0.18, 0.9, 0.28, 1)",
+                    }}
+                  >
+                    <CardFace photo={next} />
                   </div>
                 ) : null}
                 <div
                   key={current.id}
                   ref={cardRef}
-                  className="absolute inset-x-0 top-1 bottom-0 z-10 touch-none overflow-hidden rounded-[1.35rem] bg-[#e7e4de] shadow-[0_16px_40px_rgb(39_75_58/0.14)] ring-1 ring-[#274b3a]/10 select-none"
+                  className="absolute inset-x-0 top-14 bottom-0 z-10 touch-none overflow-hidden rounded-[1.35rem] bg-[#e7e4de] shadow-[0_16px_40px_rgb(39_75_58/0.14)] ring-1 ring-[#274b3a]/10 select-none"
                   style={{ transform, transition }}
                 >
                   <CardFace photo={current} />
@@ -472,6 +580,19 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             ) : null}
             </div>
           </div>
+            <div className="hidden shrink-0 flex-col items-center gap-2 md:flex">
+              <button
+                type="button"
+                aria-label="Vote"
+                onClick={() => void finish("vote")}
+                disabled={!current || busy}
+                className="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-[#274b3a] text-[#f3f2ef] shadow-[0_8px_18px_rgb(39_75_58/0.28)] disabled:opacity-40"
+              >
+                <HeartMark />
+              </button>
+              <span className="text-sm font-medium text-[#274b3a]">Vote</span>
+            </div>
+          </div>
 
           <p className="mt-2 hidden text-center text-[13px] text-[#274b3a]/60 md:block">Swipe right to vote. Swipe left to skip.</p>
 
@@ -481,32 +602,6 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             </p>
           ) : null}
 
-          <div className="mt-1.5 mb-0.5 flex items-end justify-center gap-8 md:mt-2 md:mb-2 md:gap-10">
-            <div className="flex flex-col items-center gap-1">
-              <button
-                type="button"
-                aria-label="Skip"
-                onClick={() => void finish("skip")}
-                disabled={!current || busy}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#ddd8d0] bg-[#f7f6f3] text-[#274b3a] shadow-sm disabled:opacity-40 md:h-16 md:w-16"
-              >
-                <SkipMark />
-              </button>
-                <span className="text-xs font-medium text-[#274b3a] md:text-sm">Skip</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <button
-                type="button"
-                aria-label="Vote"
-                onClick={() => void finish("vote")}
-                disabled={!current || busy}
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-[#274b3a] text-[#f3f2ef] shadow-[0_8px_18px_rgb(39_75_58/0.28)] disabled:opacity-40 md:h-[4.5rem] md:w-[4.5rem]"
-              >
-                <HeartMark />
-              </button>
-                <span className="text-xs font-medium text-[#274b3a] md:text-sm">Vote</span>
-            </div>
-          </div>
           <button
             type="button"
             onClick={() => void undo()}
@@ -516,11 +611,12 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             <UndoArrow />
             Undo
           </button>
+          </div>
         </div>
       ) : null}
 
       {screen === "mine" && voterId ? (
-        <div className="min-h-0 w-full flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-4">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-28">
           <MyPhotos
             voterId={voterId}
             ids={myPhotoIds}
@@ -533,7 +629,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "picks" ? (
-        <div data-scroll-root className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-5xl md:px-10 md:pb-4">
+        <div data-scroll-root className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-5xl md:px-10 md:pb-28">
           <PhotoLeaderboard
             mine={myPhotoIds}
             revision={boardRevision}
@@ -546,13 +642,13 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "upload" ? (
-        <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-[500px] md:px-0 md:pb-3">
-          <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">Your cup. Your shot.</h1>
-          <p className="mt-2 text-center text-sm text-[#274b3a]/75">Got a great Urban Grind photo? Enter yours.</p>
-          <p className="mx-auto mt-3 w-fit rounded-full border border-[#274b3a] px-4 py-1.5 text-[11px] font-bold tracking-[0.12em] text-[#274b3a] uppercase">
-            Win free coffee for a month
+        <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-[500px] md:px-0 md:pb-28">
+          <h1 className="text-center font-heading text-[1.75rem] leading-none tracking-wide uppercase">Win free coffee for a month</h1>
+          <p className="mt-3 text-center text-sm leading-relaxed text-[#274b3a]/75">
+            Have the perfect Urban Grind photo? Enter the contest for your chance to win free coffee for a month.
           </p>
-          <div className="mt-3">
+          <EntryCountdown className="mt-5 flex flex-col items-center" />
+          <div className="mt-8">
             <PhotoEntryForm
               presentation="shell"
               active
@@ -567,7 +663,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "entry" && entryCode ? (
-        <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex min-h-0 w-full max-w-[26rem] flex-1 flex-col overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-28">
           <PhotoDetail
             code={entryCode}
             onBack={() => router.push("/?picks=1")}
@@ -583,7 +679,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "entered" && entered ? (
-        <div className="mx-auto min-h-0 w-full max-w-[26rem] flex-1 overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex min-h-0 w-full max-w-[26rem] flex-1 flex-col overflow-y-auto px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-28">
           <PhotoEntryView
             mode="owner"
             personName={entered.personName}
@@ -598,12 +694,12 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
         </div>
       ) : null}
 
-      <nav aria-label="Contest" className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.45rem,env(safe-area-inset-bottom))] md:hidden">
-        <div className="pointer-events-auto grid w-full max-w-[22rem] grid-cols-4 rounded-full border border-[#274b3a]/10 bg-[#f7f6f3]/95 px-1 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.16)] backdrop-blur-md">
+      <nav aria-label="Contest" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.45rem,env(safe-area-inset-bottom))] md:pb-6">
+        <div className="pointer-events-auto grid w-full max-w-[22rem] grid-cols-4 rounded-full border border-[#274b3a]/10 bg-[#f7f6f3]/95 px-1 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.16)] backdrop-blur-md md:max-w-[34rem] md:px-2 md:py-2">
           {(
             [
               ["vote", "Vote"],
-              ["mine", "My Photo"],
+              ["mine", "My Photos"],
               ["picks", "Top picks"],
               ["faq", "FAQ"],
             ] as const
@@ -612,8 +708,8 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               key={tab}
               type="button"
               aria-current={bar === tab ? "page" : undefined}
-              onClick={() => goTab(tab)}
-              className={`flex flex-col items-center gap-0.5 rounded-full px-1 py-1 text-[10px] leading-none font-semibold whitespace-nowrap ${bar === tab ? "bg-[#274b3a]/8 text-[#274b3a]" : "text-[#274b3a]/45"}`}
+              onClick={() => goTab(tab, tab === "vote")}
+              className={`flex flex-col items-center gap-0.5 rounded-full px-1 py-1 text-[10px] leading-none font-semibold whitespace-nowrap md:gap-1 md:px-3 md:py-2 md:text-sm ${bar === tab ? "bg-[#274b3a]/8 text-[#274b3a]" : "text-[#274b3a]/45"}`}
             >
               {tab === "vote" ? <TabHeart filled={bar === "vote"} /> : null}
               {tab === "mine" ? <PhotoMark filled={bar === "mine"} /> : null}
@@ -628,27 +724,11 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   );
 }
 
-function ScreenTab({
-  current,
-  onClick,
-  label,
-  children,
-}: {
-  current: boolean;
-  onClick: () => void;
-  label: string;
-  children: ReactNode;
-}) {
+function UpChevron() {
   return (
-    <button
-      type="button"
-      aria-current={current ? "page" : undefined}
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-sm font-semibold ${current ? "bg-[#274b3a] text-[#f3f2ef]" : "text-[#274b3a]/55"}`}
-    >
-      {children}
-      {label}
-    </button>
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 14l6-6 6 6" />
+    </svg>
   );
 }
 
@@ -679,7 +759,7 @@ function HeartMark() {
 
 function TabHeart({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-5 md:w-5" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
       <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
     </svg>
   );
@@ -687,7 +767,7 @@ function TabHeart({ filled }: { filled: boolean }) {
 
 function PhotoMark({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
       <rect x="4" y="5" width="16" height="14" rx="2" fill={filled ? "currentColor" : "none"} />
       <circle cx="9" cy="10" r="1.4" fill={filled ? "#f3f2ef" : "currentColor"} stroke="none" />
       <path d="M7 16l3.2-3.2a1 1 0 0 1 1.4 0L20 18" fill="none" stroke={filled ? "#f3f2ef" : "currentColor"} />
@@ -697,7 +777,7 @@ function PhotoMark({ filled }: { filled: boolean }) {
 
 function FaqMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="8.25" />
       <path d="M9.6 9.4a2.4 2.4 0 1 1 3.3 2.2c-.8.4-1.3.9-1.3 1.8" />
       <path d="M12 17h.01" />
@@ -707,7 +787,7 @@ function FaqMark() {
 
 function TrophyMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 4h8v2.5a4 4 0 0 1-8 0V4z" />
       <path d="M8 6H5.2A2.2 2.2 0 0 0 7.2 10" />
       <path d="M16 6h2.8A2.2 2.2 0 0 1 16.8 10" />

@@ -187,6 +187,9 @@ function ensureUploadPrepareColumns(db: DatabaseSync): void {
   if (!names.has("prepare_generation")) {
     db.exec("ALTER TABLE photo_uploads ADD COLUMN prepare_generation INTEGER NOT NULL DEFAULT 0");
   }
+  if (!names.has("crop")) db.exec("ALTER TABLE photo_uploads ADD COLUMN crop TEXT");
+  if (!names.has("crop_version")) db.exec("ALTER TABLE photo_uploads ADD COLUMN crop_version INTEGER NOT NULL DEFAULT 0");
+  if (!names.has("crop_rendered")) db.exec("ALTER TABLE photo_uploads ADD COLUMN crop_rendered INTEGER NOT NULL DEFAULT -1");
 }
 
 /**

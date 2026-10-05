@@ -1,5 +1,6 @@
 import { beginImmediate, getDb, isUniqueConstraint, rollbackQuietly } from "@/lib/db";
-import { discardUpload, prepareUpload, UPLOAD_TTL_MS, voteKeyForUpload, thumbKeyForUpload } from "@/lib/photo-prepare";
+import type { PhotoCrop } from "@/lib/photo-crop";
+import { discardUpload, prepareUpload, saveUploadCrop, UPLOAD_TTL_MS, voteKeyForUpload, thumbKeyForUpload } from "@/lib/photo-prepare";
 import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
 import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib/sample-photos";
 import { isUuid } from "@/lib/validation";
@@ -522,6 +523,7 @@ export async function submitPhoto(input: {
   phone?: unknown;
   drinkName: unknown;
   caption: unknown;
+  crop?: PhotoCrop | null;
 }): Promise<
   | { ok: true; id: string; code: string; status: "pending" | "approved" }
   | { ok: false; code: string; message: string; fields?: FieldErrors }
@@ -568,6 +570,11 @@ export async function submitPhoto(input: {
   if (!Number.isFinite(createdAt) || Date.now() - createdAt > UPLOAD_TTL_MS) {
     await discardUpload(upload.id);
     return { ok: false, code: "UPLOAD_EXPIRED", message: "That upload expired. Choose the photo again." };
+  }
+
+  if (input.crop) {
+    const framed = await saveUploadCrop(upload.id, input.crop);
+    if (!framed.ok) return framed;
   }
 
   const prepared = await prepareUpload(upload.id);

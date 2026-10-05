@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { cropPixels, type PhotoCrop } from "@/lib/photo-crop";
 import { PHOTO_CONTENT_TYPES } from "@/lib/photo-validation";
 
 export const VOTE_LONG_EDGE = 1600;
@@ -49,35 +50,46 @@ export async function decodeHeicWithWasm(bytes: Buffer): Promise<Buffer> {
   return Buffer.from(jpeg);
 }
 
-async function render(bytes: Buffer, longEdge: number): Promise<Buffer> {
-  return sharp(bytes, { failOn: "none", animated: false, limitInputPixels: PIXEL_LIMIT })
-    .rotate()
+const sharpOptions = { failOn: "none" as const, animated: false, limitInputPixels: PIXEL_LIMIT };
+
+async function renderOriented(bytes: Buffer, longEdge: number, crop: PhotoCrop | null): Promise<Buffer> {
+  let pipeline = sharp(bytes, sharpOptions);
+  if (crop) {
+    const meta = await sharp(bytes, sharpOptions).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    if (width > 0 && height > 0) pipeline = pipeline.extract(cropPixels(width, height, crop));
+  }
+  return pipeline
     .resize({ width: longEdge, height: longEdge, fit: "inside", withoutEnlargement: true })
     .webp({ quality: IMAGE_QUALITY })
     .toBuffer();
 }
 
-async function renderPair(bytes: Buffer): Promise<{ vote: Buffer; thumb: Buffer }> {
-  const vote = await render(bytes, VOTE_LONG_EDGE);
-  const thumb = await render(bytes, THUMB_LONG_EDGE);
+async function renderPair(bytes: Buffer, crop: PhotoCrop | null): Promise<{ vote: Buffer; thumb: Buffer }> {
+  const oriented = await sharp(bytes, sharpOptions).rotate().toBuffer();
+  const vote = await renderOriented(oriented, VOTE_LONG_EDGE, crop);
+  const thumb = await renderOriented(oriented, THUMB_LONG_EDGE, crop);
   return { vote, thumb };
 }
 
 export async function makeBoardImages(
   bytes: Buffer,
+  crop?: PhotoCrop | null,
 ): Promise<{ vote: Buffer; thumb: Buffer } | { error: string }> {
   const kind = detectImageType(bytes);
   if (!kind) return { error: "That file isn't a JPEG, PNG, WebP, or HEIC photo." };
+  const frame = crop ?? null;
 
   try {
-    return await renderPair(bytes);
+    return await renderPair(bytes, frame);
   } catch {
     // Sharp's prebuilt libvips often reads the HEIC header but cannot decode HEVC.
     if (kind !== "heic") return { error: "That photo couldn't be prepared. Try a different image." };
   }
 
   try {
-    return await renderPair(await decodeHeicWithWasm(bytes));
+    return await renderPair(await decodeHeicWithWasm(bytes), frame);
   } catch {
     return { error: "That HEIC photo couldn't be prepared. Try a JPEG or PNG." };
   }

@@ -31,7 +31,8 @@ import {
 } from "@/lib/photos";
 import { firstName, photoEntryPath } from "@/lib/first-name";
 import { discardUpload, prepareUpload, setPrepareHookForTests, voteKeyForUpload } from "@/lib/photo-prepare";
-import { parsePhotoUploadRequest, validatePhotoEntry } from "@/lib/photo-validation";
+import { coverCrop } from "@/lib/photo-crop";
+import { parsePhotoUploadRequest, termsAgreementError, validatePhotoEntry } from "@/lib/photo-validation";
 import { RESIZE_LIMIT, withResizeSlot } from "@/lib/resize-queue";
 import { getPhotoStorage, readR2Config, setPhotoStorageForTests, type PhotoStorage } from "@/lib/r2";
 import { developmentSampleCount } from "@/lib/sample-photos";
@@ -205,6 +206,8 @@ describe("photo contest", { concurrency: false }, () => {
       fileName: "cup.jpg",
     });
     assert.equal(tooBig.ok, false);
+    assert.equal(termsAgreementError({ agreedToTerms: true }), null);
+    assert.equal(termsAgreementError({}), "Agree to the terms and conditions.");
     const rude = validatePhotoEntry({
       personName: "Ada",
       email: "ada@example.com",
@@ -323,6 +326,16 @@ describe("photo contest", { concurrency: false }, () => {
     assert.equal(resizedVote.height, 800);
     assert.equal(resizedThumb.width, THUMB_LONG_EDGE);
     assert.equal(resizedThumb.height, 320);
+
+    const framed = await makeBoardImages(wide, coverCrop(2000, 1000));
+    assert.ok(!("error" in framed));
+    if ("error" in framed) return;
+    const framedVote = await sharp(framed.vote).metadata();
+    const framedThumb = await sharp(framed.thumb).metadata();
+    assert.equal(framedVote.width, 750);
+    assert.equal(framedVote.height, 1000);
+    assert.equal(framedThumb.width, 480);
+    assert.equal(framedThumb.height, 640);
   });
 
   it("prepares a HEIC photo, including the wasm decoder", async () => {

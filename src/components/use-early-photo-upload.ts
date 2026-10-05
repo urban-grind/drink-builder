@@ -26,6 +26,7 @@ export function useEarlyPhotoUpload(active: boolean) {
   const keptRef = useRef(false);
   const failureRef = useRef<ApiRequestError | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadId, setUploadId] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   function invalidate() {
@@ -35,6 +36,7 @@ export function useEarlyPhotoUpload(active: boolean) {
     const id = uploadIdRef.current;
     uploadIdRef.current = null;
     pipelineRef.current = null;
+    setUploadId(null);
     setUploading(false);
     if (id) discardUpload(id);
   }
@@ -48,6 +50,7 @@ export function useEarlyPhotoUpload(active: boolean) {
     readyRef.current = false;
     failureRef.current = null;
     setPhotoError(null);
+    setUploadId(null);
     const previous = uploadIdRef.current;
     uploadIdRef.current = null;
     if (previous) discardUpload(previous);
@@ -79,6 +82,7 @@ export function useEarlyPhotoUpload(active: boolean) {
         }
         if (!put.ok) throw new ApiRequestError("UPLOAD_FAILED", "The photo didn't upload. Try again.");
         uploadIdRef.current = presign.uploadId;
+        setUploadId(presign.uploadId);
         await requestJson(`/api/photos/upload/${presign.uploadId}/prepare`, { method: "POST" });
         if (gen !== generation.current) {
           discardUpload(presign.uploadId);
@@ -121,6 +125,7 @@ export function useEarlyPhotoUpload(active: boolean) {
     const id = uploadIdRef.current;
     uploadIdRef.current = null;
     pipelineRef.current = null;
+    setUploadId(null);
     if (id) discardUpload(id);
   }, [active]);
 
@@ -143,6 +148,7 @@ export function useEarlyPhotoUpload(active: boolean) {
 
   return {
     uploading,
+    uploadId,
     photoError,
     isReady: () => readyRef.current,
     start,

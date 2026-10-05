@@ -29,9 +29,11 @@ function pagePath(offset: number): string {
   return `/api/photos/leaderboard?${params.toString()}`;
 }
 
+const PRIZE_RANKS = 2;
+
 function HeartMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-3.5 w-3.5" fill="currentColor">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="currentColor">
       <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
     </svg>
   );
@@ -41,27 +43,27 @@ function PickCard({
   photo,
   rank,
   yours,
-  prominent,
   onOpen,
 }: {
   photo: LeaderboardEntry;
   rank: number;
   yours: boolean;
-  prominent: boolean;
   onOpen: (code: string) => void;
 }) {
   const date = shortDate(photo.createdAt);
   const name = photo.personName.trim();
+  const prize = rank <= PRIZE_RANKS;
+  const place = prize ? "Free coffee for a month" : `Rank ${rank}`;
   return (
     <button
       type="button"
       onClick={() => onOpen(photo.code)}
       disabled={!photo.code}
-      aria-label={yours ? `Your photo, rank ${rank}, ${photo.drinkName}` : `${photo.drinkName}, rank ${rank}`}
-      className={`cursor-pointer border-0 bg-transparent p-0 text-left text-[#274b3a] ${prominent ? "col-span-2 md:col-span-1" : ""}`}
+      aria-label={yours ? `Your photo, ${place}, ${photo.drinkName}` : `${place}, ${photo.drinkName}`}
+      className="cursor-pointer border-0 bg-transparent p-0 text-left text-[#274b3a]"
     >
       <div
-        className={`relative overflow-hidden rounded-2xl bg-[#e7e4de] ${prominent ? "aspect-[4/5] md:aspect-[3/4]" : "aspect-[3/4]"} ${yours ? "outline outline-[3px] outline-offset-2 outline-[#274b3a]" : ""}`}
+        className={`relative aspect-[3/4] overflow-hidden rounded-2xl bg-[#e7e4de] ${yours ? "outline outline-[3px] outline-offset-2 outline-[#274b3a]" : ""}`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -71,15 +73,21 @@ function PickCard({
           decoding="async"
           className="h-full w-full object-cover"
         />
-        <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f2ef] text-sm font-semibold text-[#274b3a]">
-          {rank}
-        </span>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-2.5 pt-8 pb-2 text-white">
-          <p className="flex items-center gap-1 text-[12px] font-medium">
+        {prize ? (
+          <span className="absolute inset-x-2 top-2 rounded-full bg-[#274b3a] px-2 py-1.5 text-center text-[10px] leading-tight font-bold tracking-[0.08em] text-[#f3f2ef] uppercase">
+            Free coffee for a month
+          </span>
+        ) : (
+          <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f2ef] text-sm font-semibold text-[#274b3a]">
+            {rank}
+          </span>
+        )}
+        <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2 rounded-full bg-[#f3f2ef]/95 px-2.5 py-1.5 text-[#274b3a] shadow-[0_6px_16px_rgb(0_0_0/0.18)]">
+          <p className="flex items-center gap-1 text-sm font-bold">
             <HeartMark />
             <span>{photo.voteCount}</span>
           </p>
-          <p className="text-[11px] font-normal text-white/90">{likeLabel(photo.likePercent)}</p>
+          <p className="text-xs font-semibold">{likeLabel(photo.likePercent)}</p>
         </div>
       </div>
       <p className="mt-1.5 text-[13px] leading-tight font-medium">
@@ -203,7 +211,7 @@ export function PhotoLeaderboard({
 
   if (openCode) {
     return (
-      <div className="pt-1">
+      <div className="pt-1 md:mx-auto md:flex md:h-full md:min-h-0 md:w-full md:max-w-[26rem] md:flex-col md:pt-0">
         <PhotoDetail
           code={openCode}
           onBack={() => setOpenCode(null)}
@@ -214,21 +222,20 @@ export function PhotoLeaderboard({
     );
   }
 
-  const lead = photos.slice(0, 3);
-  const rest = photos.slice(3);
+  const prizes = photos.slice(0, PRIZE_RANKS);
+  const rest = photos.slice(PRIZE_RANKS);
 
   return (
     <div className="pt-1">
       <h1 className="text-center font-heading text-[1.85rem] leading-none tracking-wide uppercase">Top picks.</h1>
-      <p className="mt-2 text-center text-sm text-[#274b3a]/75">Your favourites, ranked.</p>
+      <p className="mt-2 text-center text-sm text-[#274b3a]/75">The top two win free coffee for a month.</p>
 
       {status === "loading" ? (
         <div role="status" className="mt-4">
           <p className="sr-only">Loading top picks</p>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5">
-            <div className="col-span-2 aspect-[4/5] animate-pulse rounded-2xl bg-[#e7e4de] md:col-span-1 md:aspect-[3/4]" />
+          <div className="grid grid-cols-2 gap-3 md:gap-5">
             <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
-            <div className="hidden aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de] md:block" />
+            <div className="aspect-[3/4] animate-pulse rounded-2xl bg-[#e7e4de]" />
           </div>
         </div>
       ) : null}
@@ -248,15 +255,15 @@ export function PhotoLeaderboard({
 
       {status === "ready" && photos.length > 0 ? (
         <div className="mt-4">
-          <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-3 md:gap-5">
-            {lead.map((photo, index) => (
-              <PickCard key={photo.id} photo={photo} rank={index + 1} prominent={index === 0} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:gap-5">
+            {prizes.map((photo, index) => (
+              <PickCard key={photo.id} photo={photo} rank={index + 1} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
             ))}
           </div>
           {rest.length > 0 ? (
             <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 md:mt-8 md:grid-cols-4 md:gap-4">
               {rest.map((photo, index) => (
-                <PickCard key={photo.id} photo={photo} rank={index + 4} prominent={false} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
+                <PickCard key={photo.id} photo={photo} rank={index + PRIZE_RANKS + 1} yours={mineIds.has(photo.id)} onOpen={setOpenCode} />
               ))}
             </div>
           ) : null}

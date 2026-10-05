@@ -125,6 +125,11 @@ export function parsePhotoContact(input: unknown): {
   return { email, phone, fields };
 }
 
+export function termsAgreementError(input: unknown): string | null {
+  if (isRecord(input) && input.agreedToTerms === true) return null;
+  return "Agree to the terms and conditions.";
+}
+
 export function validatePhotoEntry(input: unknown): PhotoValidationResult {
   if (!isRecord(input)) {
     return { ok: false, message: "Check the form and try again.", fields: {} };

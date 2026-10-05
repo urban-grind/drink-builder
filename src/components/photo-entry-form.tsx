@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { PhotoCropper } from "@/components/photo-cropper";
 import { PhotoEntryView, type OwnerEntry } from "@/components/photo-entry-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +18,10 @@ import {
   PHOTO_MAX_BYTES,
   PHOTO_NAME_MAX,
   normalizePhotoType,
+  termsAgreementError,
   validatePhotoEntry,
 } from "@/lib/photo-validation";
+import { roundCrop, type PhotoCrop } from "@/lib/photo-crop";
 import { photoEntryPath } from "@/lib/first-name";
 import type { FieldErrors } from "@/lib/types";
 
@@ -54,6 +58,7 @@ export function PhotoEntryForm({
     phone: `${baseId}-phone`,
     drinkName: `${baseId}-drink`,
     caption: `${baseId}-caption`,
+    terms: `${baseId}-terms`,
   };
   const [personName, setPersonName] = useState("");
   const [email, setEmail] = useState("");
@@ -61,9 +66,16 @@ export function PhotoEntryForm({
   const [contact, setContact] = useState("");
   const [drinkName, setDrinkName] = useState("");
   const [caption, setCaption] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [localPreviewFailed, setLocalPreviewFailed] = useState(false);
+  const [frameError, setFrameError] = useState(false);
+  const [entryStep, setEntryStep] = useState<"photo" | "crop" | "details">("photo");
   const previewRef = useRef<string | null>(null);
+  const cropRef = useRef<PhotoCrop | null>(null);
+  const cropTimer = useRef<number | null>(null);
+  const uploadIdRef = useRef<string | null>(null);
   const [uploadsEnabled, setUploadsEnabled] = useState<boolean | null>(null);
   const [fields, setFields] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -83,8 +95,33 @@ export function PhotoEntryForm({
   useEffect(() => {
     return () => {
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+      if (cropTimer.current) window.clearTimeout(cropTimer.current);
     };
   }, [previewRef]);
+
+  function queueCrop(id: string, crop: PhotoCrop) {
+    if (cropTimer.current) window.clearTimeout(cropTimer.current);
+    cropTimer.current = window.setTimeout(() => {
+      void requestJson(`/api/photos/upload/${id}/crop`, {
+        method: "POST",
+        body: JSON.stringify({ crop }),
+      }).catch(() => {
+        // Submit sends the same frame again.
+      });
+    }, 400);
+  }
+
+  function onFrame(crop: PhotoCrop) {
+    const rounded = roundCrop(crop);
+    cropRef.current = rounded;
+    const id = uploadIdRef.current;
+    if (id) queueCrop(id, rounded);
+  }
+
+  useEffect(() => {
+    uploadIdRef.current = upload.uploadId;
+    if (upload.uploadId && cropRef.current) queueCrop(upload.uploadId, cropRef.current);
+  }, [upload.uploadId]);
 
   function focusFirst(nextFields: FieldErrors) {
     const first = Object.keys(fieldIds).find((key) => nextFields[key]);
@@ -94,6 +131,11 @@ export function PhotoEntryForm({
 
   function onFile(next: File | null) {
     setFile(next);
+    cropRef.current = null;
+    setLocalPreviewFailed(false);
+    setFrameError(false);
+    setEntryStep(next ? "crop" : "photo");
+    if (cropTimer.current) window.clearTimeout(cropTimer.current);
     upload.clearError();
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     const url = next ? URL.createObjectURL(next) : null;
@@ -110,11 +152,13 @@ export function PhotoEntryForm({
     }
     if (next.size > PHOTO_MAX_BYTES) {
       upload.invalidate();
+      setEntryStep("photo");
       setFields((current) => ({ ...current, photo: "That photo is over 25MB. Use a smaller one." }));
       return;
     }
     if (!normalizePhotoType(next.type, next.name)) {
       upload.invalidate();
+      setEntryStep("photo");
       setFields((current) => ({ ...current, photo: "Use a JPEG, PNG, WebP, or HEIC photo." }));
       return;
     }
@@ -139,7 +183,10 @@ export function PhotoEntryForm({
     if (presentation === "shell" && (nextFields.email || nextFields.phone)) {
       nextFields.contact = nextFields.email || nextFields.phone;
     }
+    const terms = termsAgreementError({ agreedToTerms: agreed });
+    if (terms) nextFields.terms = terms;
     if (!file || Object.keys(nextFields).length > 0 || !parsed.ok) {
+      if (presentation === "shell") setEntryStep(!file || nextFields.photo ? (file ? "crop" : "photo") : "details");
       setFields(nextFields);
       const messages = [...new Set(Object.values(nextFields))];
       setFormError(messages.length === 1 ? messages[0] : "Check the fields below and try again.");
@@ -176,6 +223,8 @@ export function PhotoEntryForm({
           phone: parsed.value.phone ?? "",
           drinkName: parsed.value.drinkName,
           caption: parsed.value.caption,
+          agreedToTerms: true,
+          crop: cropRef.current,
         }),
       });
       upload.keep();
@@ -243,8 +292,11 @@ export function PhotoEntryForm({
 
   const buttonLabel =
     phase === "finishing" ? "Finishing your photo" : pending ? "Your photo is going up" : presentation === "shell" ? "Enter the contest" : "Add photo";
-  const photoMessage = fields.photo || upload.photoError;
+  const photoMessage = fields.photo || upload.photoError || (frameError ? "That photo couldn't be framed. Try a JPEG." : undefined);
   const contactMessage = fields.contact || fields.email || fields.phone;
+  const serverPreview = localPreviewFailed && upload.uploadId ? `/api/photos/upload/${upload.uploadId}/preview` : null;
+  const cropSrc = frameError ? null : serverPreview || (!localPreviewFailed ? preview : null);
+  const waitingForFrame = Boolean(file && !cropSrc && !frameError);
 
   if (presentation === "shell") {
     return (
@@ -255,9 +307,49 @@ export function PhotoEntryForm({
           </p>
         ) : null}
 
+        <ol className="flex justify-center gap-3 text-xs font-semibold tracking-wide text-[#274b3a]/35 uppercase">
+          {(
+            [
+              ["photo", "Upload"],
+              ["crop", "Frame"],
+              ["details", "Enter"],
+            ] as const
+          ).map(([id, label]) => (
+            <li key={id} className={entryStep === id ? "text-[#274b3a]" : undefined} aria-current={entryStep === id ? "step" : undefined}>
+              {label}
+            </li>
+          ))}
+        </ol>
+
+        {entryStep !== "photo" && (cropSrc || waitingForFrame) ? (
+          cropSrc ? (
+            <PhotoCropper
+              key={cropSrc}
+              src={cropSrc}
+              interactive={entryStep === "crop"}
+              compact={entryStep === "details"}
+              onCrop={onFrame}
+              onError={() => {
+                if (serverPreview) setFrameError(true);
+                else setLocalPreviewFailed(true);
+              }}
+            />
+          ) : (
+            <p role="status" className="text-center text-sm">
+              Getting your photo ready to frame.
+            </p>
+          )
+        ) : null}
+
         <label
           htmlFor={fieldIds.photo}
-          className="flex cursor-pointer flex-col items-center justify-center rounded-[1.4rem] border-2 border-dashed border-[#274b3a]/30 px-5 py-5 text-center"
+          className={
+            entryStep === "photo"
+              ? "flex cursor-pointer flex-col items-center justify-center rounded-[1.4rem] border-2 border-dashed border-[#274b3a]/30 px-5 py-8 text-center"
+              : entryStep === "crop"
+                ? "self-center cursor-pointer text-sm font-semibold text-[#274b3a]"
+                : "sr-only"
+          }
         >
           <input
             id={fieldIds.photo}
@@ -269,28 +361,54 @@ export function PhotoEntryForm({
             aria-describedby={photoMessage ? `${fieldIds.photo}-error` : undefined}
             onChange={(event) => onFile(event.target.files?.[0] ?? null)}
           />
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Selected drink" className="mb-4 max-h-44 w-full rounded-2xl object-cover" />
+          {entryStep === "photo" ? (
+            <>
+              <PhotoGlyph />
+              <span className="mt-3 text-sm text-[#274b3a]/75">Add a photo of your drink.</span>
+              <span className="mt-3 inline-flex h-11 items-center rounded-full bg-[#274b3a] px-6 text-sm font-semibold text-[#f3f2ef]">
+                Choose a photo
+              </span>
+            </>
+          ) : entryStep === "crop" ? (
+            "Change photo"
           ) : (
-            <PhotoGlyph />
+            "Change photo"
           )}
-          <span className="mt-3 inline-flex h-11 items-center rounded-full bg-[#274b3a] px-6 text-sm font-semibold text-[#f3f2ef]">
-            Choose a photo
-          </span>
-          <span className="mt-3 text-sm text-[#274b3a]/65">Show off your Urban Grind drink.</span>
         </label>
-        {upload.uploading && !pending ? (
-          <p role="status" className="text-sm">
+        {upload.uploading && !pending && entryStep !== "details" ? (
+          <p role="status" className="text-center text-sm">
             Your photo is going up.
           </p>
         ) : null}
-        {photoMessage ? (
-          <p id={`${fieldIds.photo}-error`} role="alert" className="text-sm text-destructive">
+        {photoMessage && entryStep !== "details" ? (
+          <p id={`${fieldIds.photo}-error`} role="alert" className="text-center text-sm text-destructive">
             {photoMessage}
           </p>
         ) : null}
 
+        {entryStep === "crop" ? (
+          <Button
+            type="button"
+            disabled={!cropSrc || pending}
+            className="h-12 w-full rounded-full bg-[#274b3a] px-6 text-base font-semibold text-[#f3f2ef]"
+            onClick={() => {
+              setEntryStep("details");
+              window.setTimeout(() => document.getElementById(fieldIds.personName)?.focus(), 0);
+            }}
+          >
+            Next
+          </Button>
+        ) : null}
+
+        {entryStep === "details" ? (
+          <button type="button" onClick={() => setEntryStep("crop")} className="self-center text-sm font-semibold text-[#274b3a]">
+            Adjust photo
+          </button>
+        ) : null}
+
+        {entryStep === "details" ? (
+        <>
+        <p className="text-center text-sm text-[#274b3a]/75">Add your name, and a way to reach you if you win.</p>
         <div className="grid gap-1.5">
           <Label htmlFor={fieldIds.personName}>Your name</Label>
           <Input
@@ -357,6 +475,8 @@ export function PhotoEntryForm({
           ) : null}
         </div>
 
+        <TermsCheckbox id={fieldIds.terms} checked={agreed} error={fields.terms} onChange={setAgreed} />
+
         {pending ? (
           <p role="status" className="text-sm font-semibold">
             {phase === "finishing" ? "Finishing your photo." : "Your photo is going up."}
@@ -372,6 +492,8 @@ export function PhotoEntryForm({
         <Button type="submit" disabled={pending || uploadsEnabled === false} className="h-12 w-full rounded-full bg-[#274b3a] px-6 text-base font-semibold text-[#f3f2ef]">
           {buttonLabel}
         </Button>
+        </>
+        ) : null}
         {onBack ? (
           <button type="button" onClick={onBack} className="self-center text-sm font-semibold text-[#274b3a]">
             Back to voting
@@ -411,9 +533,20 @@ export function PhotoEntryForm({
             aria-describedby={photoMessage ? `${fieldIds.photo}-error` : undefined}
             onChange={(event) => onFile(event.target.files?.[0] ?? null)}
           />
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Selected drink" className="max-h-80 w-full rounded-2xl object-contain" />
+          {cropSrc ? (
+            <PhotoCropper
+              key={cropSrc}
+              src={cropSrc}
+              onCrop={onFrame}
+              onError={() => {
+                if (serverPreview) setFrameError(true);
+                else setLocalPreviewFailed(true);
+              }}
+            />
+          ) : waitingForFrame ? (
+            <p role="status" className="text-sm">
+              Getting your photo ready to frame.
+            </p>
           ) : null}
           {upload.uploading && !pending ? (
             <p role="status" className="text-sm">
@@ -542,6 +675,8 @@ export function PhotoEntryForm({
           ) : null}
         </div>
 
+        <TermsCheckbox id={fieldIds.terms} checked={agreed} error={fields.terms} onChange={setAgreed} />
+
         {pending ? (
           <p role="status" className="text-base font-bold">
             {phase === "finishing" ? "Finishing your photo." : "Your photo is going up."}
@@ -559,6 +694,46 @@ export function PhotoEntryForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function TermsCheckbox({
+  id,
+  checked,
+  error,
+  onChange,
+}: {
+  id: string;
+  checked: boolean;
+  error?: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-start gap-2.5">
+        <input
+          id={id}
+          name="terms"
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[#274b3a]"
+        />
+        <label htmlFor={id} className="text-sm leading-snug text-[#274b3a]">
+          I agree to the{" "}
+          <Link href="/terms" className="font-semibold underline underline-offset-2">
+            terms and conditions
+          </Link>.
+        </label>
+      </div>
+      {error ? (
+        <p id={`${id}-error`} role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
