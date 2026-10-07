@@ -90,7 +90,7 @@ export function PhotoReview() {
 
   async function logout() {
     await requestJson("/api/photos/review/logout", { method: "POST", body: JSON.stringify({}) });
-    setPayload({ configured: true, authenticated: false, photos: [] });
+    setPayload({ configured: true, authenticated: false, photos: [], people: [] });
   }
 
   if (status === "loading") {
