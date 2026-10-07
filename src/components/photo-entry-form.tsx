@@ -433,7 +433,7 @@ export function PhotoEntryForm({
 
         {entryStep === "details" ? (
         <>
-        <p className="text-center text-sm text-[#274b3a]/75">Add your name, and a way to reach you if you win.</p>
+        <p className="text-center text-sm text-[#274b3a]/75">Add your name. Saving it signs you up so Urban Grind can contact you.</p>
         <div className="grid gap-1.5">
           <Label htmlFor={fieldIds.personName}>Your name</Label>
           <Input
@@ -463,7 +463,7 @@ export function PhotoEntryForm({
           onChange={onContact}
           onBlur={onContactBlur}
           error={contactMessage}
-          hint="Only used to contact you if you win. Kept private."
+          hint="Signing up lets Urban Grind contact you. It stays off your photo."
           hintId={contactHelpId}
         />
 
@@ -599,7 +599,7 @@ export function PhotoEntryForm({
           onChange={onContact}
           onBlur={onContactBlur}
           error={contactMessage}
-          hint="Add an email or a phone number. One is enough. We keep it private. It doesn't show with your photo."
+          hint="Signing up lets Urban Grind contact you. It stays off your photo."
           hintId={contactHelpId}
         />
 

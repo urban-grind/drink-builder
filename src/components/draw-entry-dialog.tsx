@@ -133,7 +133,7 @@ export function DrawEntryDialog({
             </button>
           </div>
           <p className="mb-4 text-sm leading-relaxed text-[#274b3a]/80">
-            Every swipe is one entry. Add your name and an email or phone so we can reach you if you win.
+            Every swipe is one entry. Add your name and an email or phone. Saving signs you up so Urban Grind can contact you.
           </p>
           <div className="grid gap-3">
             <div className="grid gap-1.5">
@@ -164,7 +164,7 @@ export function DrawEntryDialog({
               value={contact}
               onChange={setContact}
               error={fields.contact || fields.email || fields.phone}
-              hint="Only used to contact you if you win. Kept private."
+              hint="Kept private. It does not show on the site."
               hintId="draw-entry-contact-hint"
               className="text-base md:text-base"
             />

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   COMING_SOON_AT,
   comingSoonAllowsAsset,
+  comingSoonAllowsReview,
   comingSoonEnabled,
   comingSoonHtml,
   comingSoonLabel,
@@ -58,6 +59,27 @@ describe("coming soon gate", () => {
     assert.equal(comingSoonAllowsAsset("/photos/cup.jpg"), false);
     assert.equal(comingSoonAllowsAsset("/api/photos"), false);
     assert.equal(comingSoonAllowsAsset("/p/uu3goo"), false);
+  });
+
+  it("lets the cafe into review and keeps the contest covered", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    assert.equal(comingSoonAllowsReview("/photos/review", false), true);
+    assert.equal(comingSoonAllowsReview("/api/photos/review", false), true);
+    assert.equal(comingSoonAllowsReview("/api/photos/review/login", false), true);
+    assert.equal(comingSoonAllowsReview("/api/photos", false), false);
+    assert.equal(comingSoonAllowsReview("/api/photos/upload", false), false);
+    assert.equal(comingSoonAllowsReview(`/api/photos/${id}/image`, false), false);
+    assert.equal(comingSoonAllowsReview(`/api/photos/${id}/moderate`, false), false);
+    assert.equal(comingSoonAllowsReview("/api/photos/deck", false), false);
+    assert.equal(comingSoonAllowsReview("/", false), false);
+    assert.equal(comingSoonAllowsReview("/api/photos", true), true);
+    assert.equal(comingSoonAllowsReview("/api/photos/upload", true), true);
+    assert.equal(comingSoonAllowsReview(`/api/photos/upload/${id}/prepare`, true), true);
+    assert.equal(comingSoonAllowsReview(`/api/photos/${id}/image`, true), true);
+    assert.equal(comingSoonAllowsReview(`/api/photos/${id}/moderate`, true), true);
+    assert.equal(comingSoonAllowsReview("/api/photos/deck", true), false);
+    assert.equal(comingSoonAllowsReview("/api/photos/leaderboard", true), false);
+    assert.equal(comingSoonAllowsReview("/", true), false);
   });
 
   it("renders a page with the countdown and none of the contest", () => {

@@ -10,6 +10,7 @@ import { PhotoFaq } from "@/components/photo-faq";
 import { PhotoEntryForm } from "@/components/photo-entry-form";
 import { PhotoEntryView, type OwnerEntry } from "@/components/photo-entry-view";
 import { EntryCountdown } from "@/components/entry-countdown";
+import { WaysToWinDialog } from "@/components/ways-to-win-dialog";
 import { PhotoLeaderboard } from "@/components/photo-leaderboard";
 import { useMyPhotoIds } from "@/components/use-contest-memory";
 import { useDrawPrompt } from "@/components/use-draw-prompt";
@@ -90,6 +91,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const [enteredGap, setEnteredGap] = useState<number | null>(null);
   const [enteredFrom, setEnteredFrom] = useState<"upload" | "mine">("upload");
   const [votedNotice, setVotedNotice] = useState(false);
+  const [waysOpen, setWaysOpen] = useState(false);
   const myPhotoIds = useMyPhotoIds();
   const draw = useDrawPrompt({
     voterId,
@@ -108,7 +110,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const canDragRef = useRef(false);
   const setDragRef = useRef<(value: number) => void>(() => {});
   const stopDemoRef = useSwipeDemo(
-    screen === "vote" && status === "ready" && photos.length > 0 && !draw.open,
+    screen === "vote" && status === "ready" && photos.length > 0 && !draw.open && !waysOpen,
     cardRef,
     (value) => setDragRef.current(value),
     setFlight,
@@ -167,14 +169,16 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     return () => controller.abort();
   }, [ready, voterId, status, hasMore, photos.length]);
 
-  const bar: TabId =
-    screen === "mine" || screen === "entered" || (screen === "upload" && (uploadBack === "mine" || uploadBack === "entered"))
-      ? "mine"
-      : screen === "faq" || (screen === "upload" && uploadBack === "faq")
-        ? "faq"
-        : screen === "picks" || screen === "entry" || (screen === "upload" && uploadBack !== "vote")
-          ? "picks"
-          : "vote";
+  const bar: TabId | null =
+    screen === "entry"
+      ? null
+      : screen === "mine" || screen === "entered" || (screen === "upload" && (uploadBack === "mine" || uploadBack === "entered"))
+        ? "mine"
+        : screen === "faq" || (screen === "upload" && uploadBack === "faq")
+          ? "faq"
+          : screen === "picks" || (screen === "upload" && uploadBack !== "vote")
+            ? "picks"
+            : "vote";
   const current = photos[0] ?? null;
   const next = photos[1] ?? null;
   const deeper = photos[2] ?? null;
@@ -436,7 +440,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
 
       {screen === "vote" ? (
         <div className="mx-auto w-full max-w-[26rem] px-4 md:max-w-7xl md:px-10">
-          <section className="grid grid-cols-1 pt-6 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] md:items-center md:gap-x-20 md:pt-10 md:pb-28">
+          <section className="grid grid-cols-1 pt-6 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] md:items-center md:gap-x-20 md:pt-10 md:pb-20">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <div className="relative order-3 mx-auto mt-5 w-full max-w-[22rem] md:order-none md:mt-0 md:w-full md:max-w-none md:justify-self-end">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -445,7 +449,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
                 alt="Photographing an Urban Grind cup."
                 className="h-[28rem] w-full rounded-[1.35rem] object-cover object-[center_42%] md:h-auto md:max-h-[min(40rem,72vh)] md:aspect-[3/4]"
               />
-              <div className="absolute right-3 bottom-24 flex items-end gap-2 md:bottom-3">
+              <div className="absolute right-3 bottom-3 flex items-end gap-2">
                 <div className="h-24 w-[4.5rem] overflow-hidden rounded-xl shadow-[0_10px_24px_rgb(39_75_58/0.28)] ring-2 ring-[#f7f4ec] md:h-32 md:w-24">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -468,13 +472,20 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
                 <h2 className="mx-auto mt-4 max-w-[16rem] font-heading text-xl leading-tight md:mx-0 md:mt-5 md:max-w-lg md:text-4xl">
                   Swiping that won&apos;t get you in trouble.
                 </h2>
-                <EntryCountdown className="mt-5 flex flex-col items-center md:items-start" />
               </div>
-              <div className="order-4 mx-auto mt-5 max-w-[22rem] space-y-3 text-center text-sm leading-relaxed text-[#274b3a]/80 md:order-none md:mx-0 md:mt-5 md:max-w-lg md:text-left md:text-lg">
+              <EntryCountdown className="order-4 mx-auto mt-5 flex flex-col items-center md:order-none md:mx-0 md:items-start" />
+              <div className="order-5 mx-auto mt-5 max-w-[22rem] space-y-3 text-center text-sm leading-relaxed text-[#274b3a]/80 md:order-none md:mx-0 md:mt-5 md:max-w-lg md:text-left md:text-lg">
                 <p>
                   Snap your Urban Grind drink, upload your photo, and rally your friends to vote! Then join the fun! Swipe right for photos you love, left to skip.
                 </p>
                 <p>The two entries with the most votes on October 23rd win free coffee for a month!</p>
+                <button
+                  type="button"
+                  onClick={() => setWaysOpen(true)}
+                  className="font-semibold text-[#274b3a] underline underline-offset-2"
+                >
+                  View the ways to win →
+                </button>
               </div>
               <div className="order-2 mt-5 flex flex-col items-center gap-3 md:order-none md:mt-8 md:flex-row md:flex-wrap md:items-center">
                 <button
@@ -498,7 +509,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             </div>
           </section>
 
-          <div id="swipe" className="flex scroll-mt-24 flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:justify-center md:pb-28">
+          <div id="swipe" className="flex scroll-mt-24 flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:justify-center md:pb-20">
           <button
             type="button"
             aria-label="Back to the top"
@@ -671,7 +682,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "mine" && voterId ? (
-        <div className="min-h-0 w-full flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-28">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-20">
           <MyPhotos
             voterId={voterId}
             ids={myPhotoIds}
@@ -699,7 +710,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "picks" ? (
-        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-5xl md:px-10 md:pb-28">
+        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-5xl md:px-10 md:pb-20">
           <PhotoLeaderboard
             mine={myPhotoIds}
             revision={boardRevision}
@@ -707,6 +718,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               setUploadBack("picks");
               setScreen("upload");
             }}
+            onSwipe={() => goTab("vote", true)}
           />
         </div>
       ) : null}
@@ -733,11 +745,12 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "entry" && entryCode ? (
-        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-28">
+        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-20">
           <PhotoDetail
             code={entryCode}
             onBack={() => router.push("/?picks=1")}
             onEnter={() => router.push("/?upload=1")}
+            onSwipe={() => router.push("/#swipe")}
           />
         </div>
       ) : null}
@@ -749,7 +762,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen === "entered" && entered ? (
-        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-28">
+        <div className="mx-auto w-full max-w-[26rem] px-5 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-20">
           <PhotoEntryView
             mode="owner"
             personName={entered.personName}
@@ -768,8 +781,8 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {screen !== "upload" ? (
-      <nav aria-label="Contest" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.45rem,env(safe-area-inset-bottom))] md:pb-6">
-        <div className="pointer-events-auto grid w-full max-w-[22rem] grid-cols-4 rounded-full border border-[#274b3a]/10 bg-[#f7f6f3]/95 px-1 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.16)] backdrop-blur-md md:max-w-[34rem] md:px-2 md:py-2">
+      <nav aria-label="Contest" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] md:px-10 md:pb-5">
+        <div className="pointer-events-auto grid w-full max-w-[24rem] grid-cols-4 rounded-full bg-[#274b3a] px-1.5 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.28)] md:max-w-7xl md:px-2 md:py-1.5">
           {(
             [
               ["vote", "Vote"],
@@ -777,21 +790,24 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               ["mine", "My Entries"],
               ["faq", "FAQs"],
             ] as const
-          ).map(([tab, label]) => (
+          ).map(([tab, label]) => {
+            const selected = bar === tab;
+            return (
             <button
               key={tab}
               type="button"
-              aria-current={bar === tab ? "page" : undefined}
+              aria-current={selected ? "page" : undefined}
               onClick={() => goTab(tab, tab === "vote")}
-              className={`flex flex-col items-center gap-0.5 rounded-full px-1 py-1 text-[10px] leading-none font-semibold whitespace-nowrap md:gap-1 md:px-3 md:py-2 md:text-sm ${bar === tab ? "bg-[#274b3a]/8 text-[#274b3a]" : "text-[#274b3a]/45"}`}
+              className={`flex flex-col items-center gap-0.5 rounded-full px-1.5 py-1 text-xs leading-none font-semibold whitespace-nowrap md:flex-row md:justify-center md:gap-2 md:px-4 md:py-2 md:text-base ${selected ? "bg-white text-[#274b3a]" : "text-white/85"}`}
             >
-              {tab === "vote" ? <TabHeart filled={bar === "vote"} /> : null}
-              {tab === "mine" ? <PhotoMark filled={bar === "mine"} /> : null}
+              {tab === "vote" ? <TabHeart filled={selected} /> : null}
+              {tab === "mine" ? <PhotoMark filled={selected} /> : null}
               {tab === "picks" ? <TrophyMark /> : null}
               {tab === "faq" ? <FaqMark /> : null}
               {label}
             </button>
-          ))}
+            );
+          })}
         </div>
       </nav>
       ) : null}
@@ -799,6 +815,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       {voterId ? (
         <DrawEntryDialog open={draw.open} voterId={voterId} onDismiss={draw.dismiss} onSaved={draw.saved} />
       ) : null}
+      <WaysToWinDialog open={waysOpen} onClose={() => setWaysOpen(false)} />
     </div>
   );
 }
@@ -838,7 +855,7 @@ function HeartMark() {
 
 function TabHeart({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
       <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
     </svg>
   );
@@ -846,17 +863,17 @@ function TabHeart({ filled }: { filled: boolean }) {
 
 function PhotoMark({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
       <rect x="4" y="5" width="16" height="14" rx="2" fill={filled ? "currentColor" : "none"} />
-      <circle cx="9" cy="10" r="1.4" fill={filled ? "#f3f2ef" : "currentColor"} stroke="none" />
-      <path d="M7 16l3.2-3.2a1 1 0 0 1 1.4 0L20 18" fill="none" stroke={filled ? "#f3f2ef" : "currentColor"} />
+      <circle cx="9" cy="10" r="1.4" fill={filled ? "white" : "currentColor"} stroke="none" />
+      <path d="M7 16l3.2-3.2a1 1 0 0 1 1.4 0L20 18" fill="none" stroke={filled ? "white" : "currentColor"} />
     </svg>
   );
 }
 
 function FaqMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="8.25" />
       <path d="M9.6 9.4a2.4 2.4 0 1 1 3.3 2.2c-.8.4-1.3.9-1.3 1.8" />
       <path d="M12 17h.01" />
@@ -866,7 +883,7 @@ function FaqMark() {
 
 function TrophyMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 4h8v2.5a4 4 0 0 1-8 0V4z" />
       <path d="M8 6H5.2A2.2 2.2 0 0 0 7.2 10" />
       <path d="M16 6h2.8A2.2 2.2 0 0 1 16.8 10" />

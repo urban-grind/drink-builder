@@ -161,10 +161,12 @@ export function PhotoLeaderboard({
   mine,
   revision,
   onEnter,
+  onSwipe,
 }: {
   mine: string[];
   revision: number;
   onEnter?: () => void;
+  onSwipe?: () => void;
 }) {
   const [photos, setPhotos] = useState<LeaderboardEntry[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -274,6 +276,7 @@ export function PhotoLeaderboard({
           code={openCode}
           onBack={() => setOpenCode(null)}
           onEnter={onEnter}
+          onSwipe={onSwipe}
           onUpdated={(photo) => applyVote(photo)}
         />
       </div>

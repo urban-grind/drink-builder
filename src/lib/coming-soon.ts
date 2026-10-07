@@ -22,6 +22,29 @@ export function comingSoonAllowsAsset(pathname: string): boolean {
   return false;
 }
 
+const REVIEW_ENTRY =
+  /^\/api\/photos\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:moderate|image)$/i;
+
+/**
+ * The password page itself, plus the calls it needs once the cafe is signed in.
+ * Unsigned visitors get the login screen and an empty list. The public contest stays covered.
+ */
+export function comingSoonAllowsReview(pathname: string, reviewer: boolean): boolean {
+  if (pathname === "/photos/review" || pathname === "/photos/review/") return true;
+  if (
+    pathname === "/api/photos/review" ||
+    pathname === "/api/photos/review/login" ||
+    pathname === "/api/photos/review/logout"
+  ) {
+    return true;
+  }
+  if (!reviewer) return false;
+  if (pathname === "/api/photos" || pathname === "/api/photos/upload" || pathname.startsWith("/api/photos/upload/")) {
+    return true;
+  }
+  return REVIEW_ENTRY.test(pathname);
+}
+
 export type ComingSoonLeft = {
   open: boolean;
   days: number;

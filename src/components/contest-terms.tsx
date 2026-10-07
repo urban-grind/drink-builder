@@ -96,12 +96,14 @@ export function ContestTermsBody() {
             Your submitted display name, photograph, drink description, entry date and voting information may appear publicly on the contest website and in contest-related materials.
           </p>
           <p>
-            Your phone number or email address will not appear publicly. It will be used to contact you if selected as a potential winner, verify eligibility and arrange the prize.
+            Your phone number or email address will not appear publicly.
+          </p>
+          <p>
+            By entering a photo or saving your name for the draw, you sign up with Urban Grind. We can contact you at that email or phone about the contest and about Urban Grind, including news and offers.
           </p>
           <p>
             Contest information may be processed by service providers supporting the website and contest. Personal information will be retained only as reasonably necessary for these purposes and legal obligations, as described in <Blank>[link to privacy policy]</Blank>.
           </p>
-          <p>Entering does not automatically subscribe you to promotional emails or texts.</p>
         </Section>
 
         <Section title="6. Voting and fair participation">

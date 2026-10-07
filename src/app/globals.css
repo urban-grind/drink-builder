@@ -266,6 +266,13 @@ main:not(.ug-swipe) button:hover {
   background-color: #1e3b2e;
 }
 
+button:not(:disabled):not([aria-disabled="true"]),
+input:is([type="button"], [type="submit"], [type="reset"]):not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary {
+  cursor: pointer;
+}
+
 main:not(.ug-swipe) button[aria-pressed="true"],
 main:not(.ug-swipe) button[aria-pressed="true"]:hover {
   border-color: #274b3a;

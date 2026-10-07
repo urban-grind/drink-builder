@@ -4,21 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PhotoEntryView } from "@/components/photo-entry-view";
+import { VoteCountedDialog } from "@/components/vote-counted-dialog";
 import { useVoter } from "@/components/use-voter";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { photoEntryPath } from "@/lib/first-name";
+import { firstName, photoEntryPath } from "@/lib/first-name";
 import type { PublicPhoto } from "@/lib/photo-types";
 
 export function PhotoDetail({
   code,
   onBack,
   onEnter,
+  onSwipe,
   onUpdated,
 }: {
   code: string;
   onBack?: () => void;
   onEnter?: () => void;
+  onSwipe?: () => void;
   onUpdated?: (photo: PublicPhoto) => void;
 }) {
   const router = useRouter();
@@ -29,6 +32,7 @@ export function PhotoDetail({
   const [reloadKey, setReloadKey] = useState(0);
   const [votePending, setVotePending] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
+  const [countedOpen, setCountedOpen] = useState(false);
 
   useEffect(() => {
     if (!ready || !voterId) return;
@@ -70,6 +74,7 @@ export function PhotoDetail({
         body: JSON.stringify({ voterId }),
       });
       show(data.photo);
+      setCountedOpen(true);
     } catch (caught) {
       if (caught instanceof ApiRequestError && caught.code === "ALREADY_VOTED") {
         try {
@@ -130,22 +135,40 @@ export function PhotoDetail({
     );
   }
 
+  const enter = onEnter ?? (() => router.push("/?upload=1"));
+  const swipe = onSwipe ?? (() => router.push("/#swipe"));
+
   return (
-    <PhotoEntryView
-      mode="visitor"
-      personName={photo.personName}
-      drinkName={photo.drinkName}
-      photoUrl={photo.imageUrl}
-      voteCount={photo.voteCount}
-      createdAt={photo.createdAt}
-      entryPath={photoEntryPath(photo.code)}
-      voted={photo.voted}
-      votePending={votePending}
-      voteError={voteError}
-      onBack={onBack}
-      onVote={() => void vote()}
-      onEnter={onEnter ?? (() => router.push("/?upload=1"))}
-    />
+    <>
+      <PhotoEntryView
+        mode="visitor"
+        personName={photo.personName}
+        drinkName={photo.drinkName}
+        photoUrl={photo.imageUrl}
+        voteCount={photo.voteCount}
+        createdAt={photo.createdAt}
+        entryPath={photoEntryPath(photo.code)}
+        voted={photo.voted}
+        votePending={votePending}
+        voteError={voteError}
+        onBack={onBack}
+        onVote={() => void vote()}
+        onEnter={enter}
+      />
+      <VoteCountedDialog
+        open={countedOpen}
+        name={firstName(photo.personName)}
+        onClose={() => setCountedOpen(false)}
+        onSwipe={() => {
+          setCountedOpen(false);
+          swipe();
+        }}
+        onEnter={() => {
+          setCountedOpen(false);
+          enter();
+        }}
+      />
+    </>
   );
 }
 

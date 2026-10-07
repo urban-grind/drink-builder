@@ -48,7 +48,8 @@ const questions = [
   },
   {
     question: "Who sees my email or phone?",
-    answer: "It stays off your photo. We use it to reach you if you win, and so you can find your entries on another phone.",
+    answer:
+      "It stays off your photo. Entering a photo or saving your name for the draw signs you up, so Urban Grind can contact you. You can also use it to find your entries on another phone.",
   },
   {
     question: "How do I find my entries later?",

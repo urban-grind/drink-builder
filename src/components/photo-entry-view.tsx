@@ -298,9 +298,6 @@ export function PhotoEntryView({
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("story")}>
             {download === "story" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram story"}
           </button>
-          <p className="px-2 text-center text-sm text-[#274b3a]/70">
-            Add your link to the story yourself. Instagram won't place it for you.
-          </p>
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("square")}>
             {download === "square" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram post"}
           </button>
