@@ -52,6 +52,7 @@ describe("coming soon gate", () => {
     assert.equal(comingSoonAllowsAsset("/favicon.ico"), true);
     assert.equal(comingSoonAllowsAsset("/urban-grind-logo.png"), true);
     assert.equal(comingSoonAllowsAsset("/_next/static/chunks/app.js"), true);
+    assert.equal(comingSoonAllowsAsset("/coming-soon/latte-lot.jpg"), true);
     assert.equal(comingSoonAllowsAsset("/photos/cup.jpg"), false);
     assert.equal(comingSoonAllowsAsset("/api/photos"), false);
     assert.equal(comingSoonAllowsAsset("/p/uu3goo"), false);
@@ -59,8 +60,20 @@ describe("coming soon gate", () => {
 
   it("renders a page with the countdown and none of the contest", () => {
     const html = comingSoonHtml(COMING_SOON_AT - 5000);
-    assert.match(html, /Coming soon/);
+    assert.match(html, /Sip\. Snap\. Swipe\./);
+    assert.match(html, /Win free coffee<br>for a month\./);
+    assert.match(html, /Four ways to win\./);
+    assert.match(html, /Drops tonight at 7/);
+    assert.equal(html.includes("How will you win?"), false);
+    assert.equal(html.includes("Get in on the fun"), false);
+    assert.match(html, /Get the most votes/);
+    assert.match(html, /Catch our eye/);
+    assert.match(html, /Swipe for a chance to win/);
+    assert.match(html, /Share to your story/);
+    assert.match(html, /Grab your drink\. Get your photo ready\./);
+    assert.match(html, /\/coming-soon\/latte-lot\.jpg/);
     assert.match(html, /Wednesday, October 7/);
+    assert.equal(html.includes('id="days"'), false);
     assert.match(html, /7:00 p\.m\. Eastern/);
     assert.match(html, new RegExp(`data-opens="${COMING_SOON_AT}"`));
     assert.equal(html.includes("/api/photos"), false);

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PhotoCropper } from "@/components/photo-cropper";
+import { TermsDialog } from "@/components/terms-dialog";
 import { PhotoEntryView, type OwnerEntry } from "@/components/photo-entry-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -681,6 +681,7 @@ function TermsCheckbox({
   error?: string;
   onChange: (checked: boolean) => void;
 }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="grid gap-1.5">
       <div className="flex items-start gap-2.5">
@@ -691,16 +692,19 @@ function TermsCheckbox({
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
           aria-invalid={Boolean(error)}
+          aria-labelledby={`${id}-copy`}
           aria-describedby={error ? `${id}-error` : undefined}
           className="mt-0.5 h-4 w-4 shrink-0 accent-[#274b3a]"
         />
-        <label htmlFor={id} className="text-sm leading-snug text-[#274b3a]">
-          I agree to the{" "}
-          <Link href="/terms" className="font-semibold underline underline-offset-2">
+        <p id={`${id}-copy`} className="text-sm leading-snug text-[#274b3a]">
+          <label htmlFor={id}>I agree to the</label>{" "}
+          <button type="button" onClick={() => setOpen(true)} className="font-semibold underline underline-offset-2">
             terms and conditions
-          </Link>.
-        </label>
+          </button>
+          .
+        </p>
       </div>
+      <TermsDialog open={open} onClose={() => setOpen(false)} />
       {error ? (
         <p id={`${id}-error`} role="alert" className="text-sm text-destructive">
           {error}

@@ -180,6 +180,21 @@ function drawStoryCta(ctx: CanvasRenderingContext2D, heading: string, centerX: n
 }
 
 function drawVoteArrow(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const start = { x, y };
+  const c1 = { x: x + 28, y: y + 10 };
+  const c2 = { x: x + 86, y: y + 28 };
+  const end = { x: x + 62, y: y + 118 };
+  const dx = end.x - c2.x;
+  const dy = end.y - c2.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const head = 36;
+  const wing = 16;
+  const strokeEnd = { x: end.x - ux * (head * 0.45), y: end.y - uy * (head * 0.45) };
+
   ctx.save();
   ctx.strokeStyle = GREEN;
   ctx.fillStyle = GREEN;
@@ -187,15 +202,15 @@ function drawVoteArrow(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.bezierCurveTo(x + 28, y + 10, x + 86, y + 28, x + 62, y + 118);
+  ctx.moveTo(start.x, start.y);
+  ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, strokeEnd.x, strokeEnd.y);
   ctx.stroke();
-  const tipX = x + 62;
-  const tipY = y + 118;
+  const baseX = end.x - ux * head;
+  const baseY = end.y - uy * head;
   ctx.beginPath();
-  ctx.moveTo(tipX - 2, tipY + 2);
-  ctx.lineTo(tipX - 30, tipY - 10);
-  ctx.lineTo(tipX - 6, tipY - 32);
+  ctx.moveTo(end.x, end.y);
+  ctx.lineTo(baseX + px * wing, baseY + py * wing);
+  ctx.lineTo(baseX - px * wing, baseY - py * wing);
   ctx.closePath();
   ctx.fill();
   ctx.restore();

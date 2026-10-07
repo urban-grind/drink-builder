@@ -19,7 +19,13 @@ export function ContestTerms() {
           </Link>
         </div>
       </header>
+      <ContestTermsBody />
+    </article>
+  );
+}
 
+export function ContestTermsBody() {
+  return (
       <div className="mx-auto w-full max-w-2xl px-5 pt-6 pb-16">
         <p className="text-[11px] font-bold tracking-[0.14em] text-[#274b3a]/70 uppercase">Sip. Snap. Swipe.</p>
         <h1 className="mt-2 font-heading text-4xl leading-none tracking-wide uppercase">Contest terms</h1>
@@ -149,7 +155,6 @@ export function ContestTerms() {
           </p>
         </Section>
       </div>
-    </article>
   );
 }
 

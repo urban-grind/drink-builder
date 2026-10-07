@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { InstagramSize } from "@/lib/instagram-png";
 import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
 import { phoneSharesPng } from "@/lib/share-png";
@@ -67,10 +67,19 @@ export function PhotoEntryView({
   const [download, setDownload] = useState<InstagramSize | null>(null);
   const [sharing, setSharing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const photoDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     setHref(new URL(entryPath, window.location.origin).toString());
   }, [entryPath]);
+
+  useEffect(() => {
+    const node = photoDialog.current;
+    if (!node) return;
+    if (photoOpen && !node.open) node.showModal();
+    if (!photoOpen && node.open) node.close();
+  }, [photoOpen]);
 
   useEffect(() => {
     if (!copied && !shareNote) return;
@@ -162,14 +171,16 @@ export function PhotoEntryView({
       <h1 className="shrink-0 font-heading text-[1.7rem] leading-tight tracking-wide uppercase text-balance">{headline}</h1>
       <p className="mt-2 shrink-0 text-sm text-[#274b3a]/75">{subtitle}</p>
       <div className="relative mt-4 overflow-hidden rounded-2xl">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photoUrl}
-          alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
-          className="aspect-[4/5] w-full bg-[#e7e4de] object-cover"
-        />
+        <button type="button" onClick={() => setPhotoOpen(true)} className="block w-full cursor-zoom-in" aria-label="Open photo full screen">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photoUrl}
+            alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
+            className="aspect-[4/5] w-full bg-[#e7e4de] object-cover"
+          />
+        </button>
         {mode === "owner" ? (
-          <div className="absolute inset-x-0 top-0">
+          <div className="absolute inset-x-0 top-0 z-10">
             <p className="bg-[#274b3a] px-4 py-2.5 text-center text-sm font-semibold text-[#f3f2ef]">{banner}</p>
             <div className="grid grid-cols-2 gap-2 px-3 pt-3">
               <button
@@ -187,7 +198,7 @@ export function PhotoEntryView({
           </div>
         ) : mode === "visitor" ? (
           <>
-          <div className="absolute inset-x-3 top-3 hidden md:block">
+          <div className="absolute inset-x-3 top-3 z-10 hidden md:block">
             <button
               type="button"
               className={greenButton}
@@ -204,7 +215,7 @@ export function PhotoEntryView({
               </p>
             ) : null}
           </div>
-          <div className="absolute inset-x-3 bottom-3 flex flex-col gap-2 md:hidden">
+          <div className="absolute inset-x-3 bottom-3 z-10 flex flex-col gap-2 md:hidden">
             <button
               type="button"
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#274b3a] px-4 text-[15px] font-semibold text-[#f3f2ef] shadow-[0_8px_20px_rgb(0_0_0/0.28)] disabled:opacity-50"
@@ -236,6 +247,36 @@ export function PhotoEntryView({
           </>
         ) : null}
       </div>
+      <dialog
+        ref={photoDialog}
+        aria-label="Photo"
+        className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none border-0 bg-black p-0 text-white backdrop:bg-black"
+        onClose={() => setPhotoOpen(false)}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between bg-black px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setPhotoOpen(false)}
+              aria-label="Close"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full"
+            >
+              <CloseMark />
+            </button>
+            <button type="button" onClick={() => setPhotoOpen(false)} className="h-11 rounded-full px-4 text-sm font-semibold">
+              Close
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photoUrl}
+              alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
+              className="max-h-full max-w-full object-contain"
+            />
+          </div>
+        </div>
+      </dialog>
       <div className="mt-3 shrink-0 rounded-2xl bg-white px-4 py-3 shadow-[0_10px_28px_rgb(39_75_58/0.06)]">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -257,6 +298,9 @@ export function PhotoEntryView({
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("story")}>
             {download === "story" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram story"}
           </button>
+          <p className="px-2 text-center text-sm text-[#274b3a]/70">
+            Add your link to the story yourself. Instagram won't place it for you.
+          </p>
           <button type="button" className={outlineButton} disabled={download !== null} onClick={() => void save("square")}>
             {download === "square" ? (sharing ? "Sharing…" : "Saving…") : "Download Instagram post"}
           </button>
@@ -333,6 +377,14 @@ function shareWasClosed(error: unknown): boolean {
   if (typeof error !== "object" || error === null || !("name" in error)) return false;
   const name = (error as { name: unknown }).name;
   return name === "AbortError" || name === "InvalidStateError";
+}
+
+function CloseMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
 }
 
 function Chevron() {
