@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api";
+import { drawProgress } from "@/lib/draw-entry";
 import { readPhotoJson } from "@/lib/photo-http";
 import { undoDeckSwipe } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
       const message = result.code === "NOT_FOUND" ? "That photo isn't here." : "Only the last swipe can be undone.";
       return jsonError(status, result.code, message);
     }
-    return jsonOk({ action: result.action, photo: result.photo });
+    return jsonOk({ action: result.action, photo: result.photo, ...drawProgress(voter.voterId) });
   } catch (error) {
     console.error("Failed to undo a swipe", safeErrorText(error));
     return jsonError(500, "SERVER", "That undo didn't go through. Try again.");

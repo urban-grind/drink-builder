@@ -13,6 +13,7 @@ export function ContactField({
   error,
   hint,
   hintId,
+  className,
 }: {
   id: string;
   label?: string;
@@ -22,6 +23,7 @@ export function ContactField({
   error?: string;
   hint?: string;
   hintId?: string;
+  className?: string;
 }) {
   const trimmed = value.trim();
   const email = contactLooksLikeEmail(trimmed);
@@ -40,6 +42,7 @@ export function ContactField({
         aria-invalid={Boolean(error)}
         aria-describedby={describedBy || undefined}
         placeholder="705-555-0199 or name@email.com"
+        className={className}
         onChange={(event) => onChange(event.target.value)}
       />
       {hint && hintId ? (

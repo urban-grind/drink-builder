@@ -1,5 +1,7 @@
+import { DRAW_ASK_EVERY, nextDrawAsk } from "@/lib/draw-prompt";
 import { isUuid } from "@/lib/validation";
 import {
+  DRAW_ASK_AFTER_KEY,
   LEADERBOARD_OPEN_EVENT,
   LEADERBOARD_OPEN_KEY,
   MY_PHOTOS_EVENT,
@@ -70,6 +72,19 @@ export function rememberMyPhoto(id: string) {
   if (ids.includes(id)) return;
   localStorage.setItem(MY_PHOTOS_STORAGE_KEY, JSON.stringify([...ids, id]));
   window.dispatchEvent(new Event(MY_PHOTOS_EVENT));
+}
+
+export function readDrawAskAfter(): number {
+  const parsed = Number(localStorage.getItem(DRAW_ASK_AFTER_KEY));
+  if (!Number.isInteger(parsed) || parsed < DRAW_ASK_EVERY) return DRAW_ASK_EVERY;
+  return parsed;
+}
+
+/** Remembers the swipe count that should open the prompt next. Returns that count. */
+export function dismissDrawAsk(swipes: number): number {
+  const next = nextDrawAsk(swipes);
+  localStorage.setItem(DRAW_ASK_AFTER_KEY, String(next));
+  return next;
 }
 
 export function readLeaderboardOpen(): boolean {

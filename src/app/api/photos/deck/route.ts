@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api";
+import { drawProgress } from "@/lib/draw-entry";
 import { readPhotoJson } from "@/lib/photo-http";
 import { DECK_PAGE_SIZE, listPhotoDeck, swipeDeckPhoto } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
       const message = result.code === "NOT_FOUND" ? "That photo isn't here." : "You already passed on this photo.";
       return jsonError(status, result.code, message);
     }
-    return jsonOk({ photo: result.photo });
+    return jsonOk({ photo: result.photo, ...drawProgress(voter.voterId) });
   } catch (error) {
     console.error("Failed to save a swipe", safeErrorText(error));
     return jsonError(500, "SERVER", "That swipe didn't go through. Try again.");

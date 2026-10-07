@@ -4,5 +4,6 @@ export const MY_DRINK_STORAGE_KEY = "drink-builder-my-drink";
 export const MY_DRINK_EVENT = "drink-my-drink";
 export const MY_PHOTOS_STORAGE_KEY = "drink-builder-my-photos";
 export const MY_PHOTOS_EVENT = "drink-my-photos";
+export const DRAW_ASK_AFTER_KEY = "drink-builder-draw-ask-after";
 export const LEADERBOARD_OPEN_KEY = "drink-builder-leaderboard-open";
 export const LEADERBOARD_OPEN_EVENT = "drink-leaderboard-open";

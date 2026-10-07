@@ -17,6 +17,7 @@ export function comingSoonAllowsAsset(pathname: string): boolean {
   if (pathname === "/favicon.ico" || pathname === "/urban-grind-logo.png") return true;
   if (pathname === "/icon" || pathname === "/icon.png" || pathname.startsWith("/apple-icon")) return true;
   if (pathname.startsWith("/coming-soon/")) return true;
+  if (pathname === "/api/coming-soon/hit") return true;
   if (pathname.startsWith("/_next/static/") || pathname.startsWith("/_next/webpack-hmr")) return true;
   return false;
 }
@@ -186,6 +187,40 @@ h1{margin:.55rem 0 0;font-family:Recoleta,"Iowan Old Style",Palatino,Georgia,ser
 </main>
 <script>
 (function () {
+  var key = "ug-coming-soon";
+  function visitorId() {
+    try {
+      var existing = localStorage.getItem(key);
+      if (existing) return existing;
+      if (!window.crypto || !crypto.randomUUID) return "";
+      var created = crypto.randomUUID();
+      localStorage.setItem(key, created);
+      return created;
+    } catch (error) {
+      return "";
+    }
+  }
+  function track(kind, name) {
+    var id = visitorId();
+    if (!id) return;
+    var body = JSON.stringify({ visitorId: id, kind: kind, name: name });
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon("/api/coming-soon/hit", new Blob([body], { type: "application/json" }));
+        return;
+      }
+    } catch (error) {}
+    fetch("/api/coming-soon/hit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: body,
+      keepalive: true
+    }).catch(function () {});
+  }
+  track("visit", "page");
+  window.ugTrack = track;
+})();
+(function () {
   var root = document.getElementById("count");
   var opens = Number(root.getAttribute("data-opens"));
   var units = ["hours","minutes","seconds"];
@@ -264,6 +299,7 @@ h1{margin:.55rem 0 0;font-family:Recoleta,"Iowan Old Style",Palatino,Georgia,ser
   }
   button.addEventListener("click", function () {
     if (busy) return;
+    if (window.ugTrack) window.ugTrack("click", "story");
     busy = true;
     button.setAttribute("aria-busy", "true");
     note.textContent = "";

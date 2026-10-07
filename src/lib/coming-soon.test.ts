@@ -53,6 +53,8 @@ describe("coming soon gate", () => {
     assert.equal(comingSoonAllowsAsset("/urban-grind-logo.png"), true);
     assert.equal(comingSoonAllowsAsset("/_next/static/chunks/app.js"), true);
     assert.equal(comingSoonAllowsAsset("/coming-soon/latte-lot.jpg"), true);
+    assert.equal(comingSoonAllowsAsset("/coming-soon/stats"), true);
+    assert.equal(comingSoonAllowsAsset("/api/coming-soon/hit"), true);
     assert.equal(comingSoonAllowsAsset("/photos/cup.jpg"), false);
     assert.equal(comingSoonAllowsAsset("/api/photos"), false);
     assert.equal(comingSoonAllowsAsset("/p/uu3goo"), false);
@@ -82,6 +84,9 @@ describe("coming soon gate", () => {
     assert.match(html, /Download the story/);
     assert.equal(html.includes("Saved the story image"), false);
     assert.match(html, /\/coming-soon\/sip-snap-swipe\.png/);
+    assert.match(html, /\/api\/coming-soon\/hit/);
+    assert.match(html, /ug-coming-soon/);
+    assert.match(html, /ugTrack\("click", "story"\)/);
     assert.equal(comingSoonAllowsAsset("/coming-soon/sip-snap-swipe.png"), true);
     assert.match(html, /Grab your drink\. Get your photo ready\./);
     assert.match(html, /\/coming-soon\/latte-lot\.jpg/);

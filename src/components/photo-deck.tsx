@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
+import { DrawEntryDialog } from "@/components/draw-entry-dialog";
 import { MyPhotos } from "@/components/my-photos";
 import { PhotoDetail } from "@/components/photo-detail";
 import { PhotoFaq } from "@/components/photo-faq";
@@ -11,6 +12,7 @@ import { PhotoEntryView, type OwnerEntry } from "@/components/photo-entry-view";
 import { EntryCountdown } from "@/components/entry-countdown";
 import { PhotoLeaderboard } from "@/components/photo-leaderboard";
 import { useMyPhotoIds } from "@/components/use-contest-memory";
+import { useDrawPrompt } from "@/components/use-draw-prompt";
 import { useSwipeDemo } from "@/components/use-swipe-demo";
 import { useVoter } from "@/components/use-voter";
 import { Button } from "@/components/ui/button";
@@ -89,6 +91,12 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const [enteredFrom, setEnteredFrom] = useState<"upload" | "mine">("upload");
   const [votedNotice, setVotedNotice] = useState(false);
   const myPhotoIds = useMyPhotoIds();
+  const draw = useDrawPrompt({
+    voterId,
+    ready,
+    photoIds: myPhotoIds,
+    asking: screen === "vote",
+  });
   const photosRef = useRef<PublicPhoto[]>([]);
   const startX = useRef<number | null>(null);
   const gesture = useRef<{ x: number; y: number; mode: "pending" | "up" | "side" } | null>(null);
@@ -100,7 +108,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const canDragRef = useRef(false);
   const setDragRef = useRef<(value: number) => void>(() => {});
   const stopDemoRef = useSwipeDemo(
-    screen === "vote" && status === "ready" && photos.length > 0,
+    screen === "vote" && status === "ready" && photos.length > 0 && !draw.open,
     cardRef,
     (value) => setDragRef.current(value),
     setFlight,
@@ -201,9 +209,9 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     startX.current = null;
     setFlight(action === "vote" ? "right" : "left");
     try {
-      await Promise.all([
+      const [, data] = await Promise.all([
         wait(430),
-        requestJson("/api/photos/deck", {
+        requestJson<{ swipes: number; known: boolean }>("/api/photos/deck", {
           method: "POST",
           body: JSON.stringify({ voterId, photoId: photo.id, action }),
         }),
@@ -214,6 +222,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       setLast({ photo, action });
       setVotedNotice(action === "vote");
       setBoardRevision((value) => value + 1);
+      draw.note(data.swipes, data.known);
     } catch (caught) {
       setFlight("back");
       setDrag(0);
@@ -229,7 +238,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     setBusy(true);
     setError("");
     try {
-      const data = await requestJson<{ photo: PublicPhoto; action: "vote" | "skip" }>("/api/photos/deck/undo", {
+      const data = await requestJson<{ photo: PublicPhoto; action: "vote" | "skip"; swipes: number; known: boolean }>("/api/photos/deck/undo", {
         method: "POST",
         body: JSON.stringify({ voterId, photoId: previous.photo.id }),
       });
@@ -241,6 +250,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
         setVotedNotice(false);
         setBoardRevision((value) => value + 1);
       });
+      draw.note(data.swipes, data.known);
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => setFlight("rest"));
       });
@@ -784,6 +794,10 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
           ))}
         </div>
       </nav>
+      ) : null}
+
+      {voterId ? (
+        <DrawEntryDialog open={draw.open} voterId={voterId} onDismiss={draw.dismiss} onSaved={draw.saved} />
       ) : null}
     </div>
   );

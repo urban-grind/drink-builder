@@ -159,6 +159,51 @@ export function termsAgreementError(input: unknown): string | null {
   return "Agree to the terms and conditions.";
 }
 
+function readPersonName(value: unknown): { name: string | null; error: string | null } {
+  const personName = typeof value === "string" ? cleanText(value) : null;
+  if (!personName) return { name: null, error: "Add your name." };
+  if (personName.length > PHOTO_NAME_MAX) {
+    return { name: null, error: `Keep your name to ${PHOTO_NAME_MAX} characters or fewer.` };
+  }
+  if (hasRudeLanguage(personName)) return { name: null, error: "Please use different wording for your name." };
+  return { name: personName, error: null };
+}
+
+export type DrawEntryInput = {
+  personName: string;
+  email: string | null;
+  phone: string | null;
+};
+
+/** Name plus one way to reach the person. Same rules as a photo entry, without the drink. */
+export function parseDrawEntry(input: unknown): { ok: true; value: DrawEntryInput } | { ok: false; message: string; fields: FieldErrors } {
+  if (!isRecord(input)) {
+    return { ok: false, message: "Check the form and try again.", fields: {} };
+  }
+
+  const fields: FieldErrors = {};
+  const name = readPersonName(input.personName);
+  if (!name.name) fields.personName = name.error ?? "Add your name.";
+
+  const contact = parsePhotoContact(input);
+  if (!contact.email && !contact.phone) {
+    fields.contact = contact.fields.email || contact.fields.phone || "Add an email or a phone number.";
+  } else if (contact.fields.email || contact.fields.phone) {
+    fields.contact = contact.fields.email || contact.fields.phone || "Enter a valid email or phone number.";
+  }
+
+  if (Object.keys(fields).length > 0 || !name.name) {
+    const messages = [...new Set(Object.values(fields))];
+    return {
+      ok: false,
+      message: messages.length === 1 ? messages[0] : "Check the fields below and try again.",
+      fields,
+    };
+  }
+
+  return { ok: true, value: { personName: name.name, email: contact.email, phone: contact.phone } };
+}
+
 export function validatePhotoEntry(input: unknown): PhotoValidationResult {
   if (!isRecord(input)) {
     return { ok: false, message: "Check the form and try again.", fields: {} };
@@ -166,13 +211,9 @@ export function validatePhotoEntry(input: unknown): PhotoValidationResult {
 
   const fields: FieldErrors = {};
 
-  const personName = typeof input.personName === "string" ? cleanText(input.personName) : null;
-  if (!personName) fields.personName = "Add your name.";
-  else if (personName.length > PHOTO_NAME_MAX) {
-    fields.personName = `Keep your name to ${PHOTO_NAME_MAX} characters or fewer.`;
-  } else if (hasRudeLanguage(personName)) {
-    fields.personName = "Please use different wording for your name.";
-  }
+  const name = readPersonName(input.personName);
+  const personName = name.name;
+  if (!personName) fields.personName = name.error ?? "Add your name.";
 
   const contact = parsePhotoContact(input);
   Object.assign(fields, contact.fields);

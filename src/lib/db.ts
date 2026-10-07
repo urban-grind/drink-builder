@@ -155,6 +155,24 @@ function ensurePhotoTables(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_photo_swipes_voter ON photo_swipes (voter_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_photo_swipes_photo ON photo_swipes (photo_id, action);
+    CREATE TABLE IF NOT EXISTS draw_entrants (
+      voter_id TEXT PRIMARY KEY,
+      person_name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      created_at TEXT NOT NULL,
+      CHECK (email IS NOT NULL OR phone IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_draw_entrants_email ON draw_entrants (email) WHERE email IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_draw_entrants_phone ON draw_entrants (phone) WHERE phone IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS coming_soon_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visitor_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_coming_soon_events_kind ON coming_soon_events (kind, name);
   `);
   const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as {
     name: string;
