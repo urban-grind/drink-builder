@@ -246,7 +246,7 @@ h1{margin:.55rem 0 0;font-family:Recoleta,"Iowan Old Style",Palatino,Georgia,ser
   var fileName = "Urban-Grind-Story.png";
   var blob = null;
   var busy = false;
-  var loading = fetch("/coming-soon/sip-snap-swipe.png?v=5").then(function (response) {
+  var loading = fetch("/coming-soon/sip-snap-swipe.png?v=6").then(function (response) {
     if (!response.ok) throw new Error("missing");
     return response.blob();
   }).then(function (data) {
