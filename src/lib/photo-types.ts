@@ -33,6 +33,16 @@ export type ReviewPhoto = PublicPhoto & {
   status: PhotoStatus;
 };
 
+/** Review-only shape of one photo's votes. Network labels are groups, not addresses. */
+export type VoteAudit = {
+  voteCount: number;
+  networkCount: number;
+  missingNetwork: number;
+  fromPhotoPage: number;
+  onlyThisPhoto: number;
+  networks: { label: string; votes: number; when: string }[];
+};
+
 /** Public board totals, plus what arrived since midnight Eastern. */
 export type ContestActivity = {
   photos: number;

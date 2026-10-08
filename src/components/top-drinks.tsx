@@ -1,43 +1,49 @@
 "use client";
 
-import { useState } from "react";
-import { drinkShareLabel, type DrinkStats, type DrinkTotal } from "@/lib/drink-stats";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { DrinkStats, DrinkTotal } from "@/lib/drink-stats";
 
 const TABS = [
-  ["day", "Today", "The #1 pick today"],
-  ["week", "This week", "The #1 pick this week"],
-  ["month", "This month", "The #1 pick this month"],
+  ["day", "Today", "Popular today"],
+  ["week", "This week", "Popular this week"],
+  ["month", "This month", "Popular this month"],
 ] as const;
 
-const PREVIEW = 5;
+const FEATURED = 3;
+const GROW_MS = 460;
+const GROW = `top ${GROW_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1), left ${GROW_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1), width ${GROW_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1), height ${GROW_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1), border-radius ${GROW_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
+
+type DrinkOrigin = { top: number; left: number; width: number; height: number };
 
 export function TopDrinks({ stats }: { stats: DrinkStats }) {
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("day");
-  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<{ drink: DrinkTotal; origin: DrinkOrigin } | null>(null);
   const current = TABS.find((item) => item[0] === tab) ?? TABS[0];
   const drinks = stats[current[0]];
-  const shown = open ? drinks : drinks.slice(0, PREVIEW);
-  const leader = shown[0];
-  const rest = shown.slice(1);
-  const leaderShare = drinks[0]?.share ?? 0;
+  const featured = drinks.slice(0, FEATURED);
+  const rest = drinks.slice(FEATURED);
+
+  function openDrink(drink: DrinkTotal, source: HTMLElement) {
+    setSelected({ drink, origin: readOrigin(source) });
+  }
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl pb-10">
       <div role="tablist" aria-label="Drink rankings" className="flex flex-wrap items-center gap-1">
         {TABS.map(([key, title]) => {
-          const selected = tab === key;
+          const active = tab === key;
           return (
             <button
               key={key}
               type="button"
               role="tab"
-              aria-selected={selected}
+              aria-selected={active}
               onClick={() => {
                 setTab(key);
-                setOpen(false);
+                setSelected(null);
               }}
               className={
-                selected
+                active
                   ? "rounded-full bg-[#274b3a] px-5 py-2.5 text-sm font-semibold text-[#f7f4ec]"
                   : "!rounded-full !bg-transparent px-4 py-2.5 text-sm font-semibold !text-[#274b3a]/70 hover:!bg-transparent"
               }
@@ -48,76 +54,264 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
         })}
       </div>
 
-      {leader ? (
-        <div className="mt-6 flex items-center gap-5 rounded-[1.35rem] bg-[#274b3a] px-6 py-7 text-[#f7f4ec] sm:gap-8 sm:px-8 sm:py-8">
-          <DrinkPhoto imageUrl={leader.imageUrl} large onDark />
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-[#f7f4ec]/75 uppercase">{current[2]}</p>
-            <h1 className="mt-3 font-heading text-4xl leading-tight sm:text-5xl">{leader.name}</h1>
-            <p className="sr-only">{drinkShareLabel(leader.share)} of drinks ordered</p>
-            <div className="mt-6 w-40 max-w-full">
-              <ShareBar share={leader.share} leader={leaderShare} onDark />
-            </div>
-          </div>
+      <h1 className="mt-8 font-heading text-4xl leading-none text-[#274b3a]">{current[2]}</h1>
+
+      {drinks.length === 0 ? <p className="mt-4 text-sm text-[#274b3a]/70">No drinks yet.</p> : null}
+
+      {featured.length > 0 ? (
+        <div className={`mt-4 grid gap-3 ${featured.length === 1 ? "grid-cols-1" : featured.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+          {featured.map((drink, index) => (
+            <DrinkCard key={drink.name} drink={drink} rank={index + 1} onOpen={openDrink} />
+          ))}
         </div>
-      ) : (
-        <p className="mt-6 text-sm text-[#274b3a]/70">No drinks yet.</p>
-      )}
+      ) : null}
 
       {rest.length > 0 ? (
-        <ol className="mt-6" start={2}>
+        <ol className="mt-2" start={FEATURED + 1}>
           {rest.map((drink, index) => (
-            <DrinkRow key={drink.name} drink={drink} rank={index + 2} leader={leaderShare} />
+            <li key={drink.name} className="border-t border-[#274b3a]/12">
+              <button
+                type="button"
+                data-drink-name={drink.name}
+                onClick={(event) => openDrink(drink, event.currentTarget)}
+                className="!flex !h-auto !w-full !items-center !justify-start !gap-4 !rounded-none !bg-transparent !px-0 !py-3 !text-left !font-semibold !text-[#274b3a] hover:!bg-transparent"
+              >
+                <span className="w-6 shrink-0 font-normal text-[#7d9488]">{index + FEATURED + 1}</span>
+                <DrinkPhoto imageUrl={drink.imageUrl} />
+                <span className="min-w-0 flex-1 leading-tight">{drink.name}</span>
+              </button>
+            </li>
           ))}
         </ol>
       ) : null}
 
-      <div className="mt-8 flex items-center justify-between gap-4 text-sm">
-        <p className="text-[#274b3a]/60">Based on drinks sold · Eastern time</p>
-        {drinks.length > PREVIEW ? (
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="!bg-transparent !px-0 !py-0 font-semibold !text-[#274b3a] underline underline-offset-4 hover:!bg-transparent"
-          >
-            {open ? "Show fewer" : "See more favourites"}
-          </button>
-        ) : null}
-      </div>
+      <DrinkDetail drink={selected?.drink ?? null} origin={selected?.origin ?? null} onClose={() => setSelected(null)} />
     </div>
   );
 }
 
-function DrinkRow({ drink, rank, leader }: { drink: DrinkTotal; rank: number; leader: number }) {
+function DrinkCard({ drink, rank, onOpen }: { drink: DrinkTotal; rank: number; onOpen: (drink: DrinkTotal, source: HTMLElement) => void }) {
   return (
-    <li className="flex items-center gap-4 border-t border-[#274b3a]/12 py-4">
-      <span className="w-6 shrink-0 text-[#7d9488]">{rank}</span>
-      <DrinkPhoto imageUrl={drink.imageUrl} />
-      <p className="min-w-0 flex-1 font-semibold text-[#274b3a]">{drink.name}</p>
-      <div className="w-24 shrink-0 sm:w-32">
-        <ShareBar share={drink.share} leader={leader} />
-      </div>
-      <span className="sr-only">{drinkShareLabel(drink.share)} of drinks ordered</span>
-    </li>
+    <button
+      type="button"
+      data-drink-name={drink.name}
+      onClick={(event) => onOpen(drink, event.currentTarget)}
+      className="!flex !h-auto !w-full !flex-col !items-stretch !gap-2 !rounded-2xl !bg-white !p-3 !text-left !font-semibold !text-[#274b3a] shadow-[0_10px_24px_rgb(39_75_58/0.06)] hover:!bg-white"
+    >
+      <DrinkPhoto imageUrl={drink.imageUrl} large />
+      <span className="text-sm font-normal text-[#7d9488]">{rank}</span>
+      <span className="text-sm leading-tight text-pretty">{drink.name}</span>
+    </button>
   );
 }
 
-function DrinkPhoto({
-  imageUrl,
-  large = false,
-  onDark = false,
-}: {
-  imageUrl: string | null;
-  large?: boolean;
-  onDark?: boolean;
-}) {
-  const frame = large ? "h-24 w-24 sm:h-32 sm:w-32" : "h-11 w-11";
+function DrinkDetail({ drink, origin, onClose }: { drink: DrinkTotal | null; origin: DrinkOrigin | null; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const closing = useRef(false);
+  const motion = useRef(0);
+
+  useLayoutEffect(() => {
+    const node = dialog.current;
+    if (!node) return;
+    const run = ++motion.current;
+    if (!drink || !origin) {
+      if (node.open) node.close();
+      return;
+    }
+    closing.current = false;
+    resetMotion(node);
+    if (!node.open) node.showModal();
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      setSourceHidden(drink.name, true);
+      node.classList.add("shown");
+      showCopy(node, false);
+      node.querySelector<HTMLElement>("[data-close]")?.focus();
+      return;
+    }
+    const finalBox = node.getBoundingClientRect();
+    hideCopy(node);
+    setSourceHidden(drink.name, true);
+    place(node, origin, "16px");
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      if (motion.current !== run) return;
+      second = requestAnimationFrame(() => {
+        if (motion.current !== run) return;
+        node.style.transition = GROW;
+        place(node, rectBox(finalBox), "24px");
+        node.classList.add("shown");
+        showCopy(node, true);
+        const settle = (event: TransitionEvent) => {
+          if (event.target !== node || event.propertyName !== "width") return;
+          node.style.overflow = "auto";
+          node.removeEventListener("transitionend", settle);
+        };
+        node.addEventListener("transitionend", settle);
+        node.querySelector<HTMLElement>("[data-close]")?.focus();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [drink, origin]);
+
+  function startClose() {
+    const node = dialog.current;
+    if (!node?.open || closing.current) return;
+    motion.current += 1;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || !drink || !origin) {
+      node.close();
+      return;
+    }
+    closing.current = true;
+    setSourceHidden(drink.name, true);
+    node.classList.remove("shown");
+    hideCopy(node, true);
+    node.style.overflow = "hidden";
+    node.style.transition = GROW;
+    place(node, liveOrigin(drink.name, origin), "16px");
+    const finish = () => {
+      if (!closing.current) return;
+      closing.current = false;
+      if (node.open) node.close();
+    };
+    const onEnd = (event: TransitionEvent) => {
+      if (event.target !== node || event.propertyName !== "width") return;
+      node.removeEventListener("transitionend", onEnd);
+      finish();
+    };
+    node.addEventListener("transitionend", onEnd);
+    window.setTimeout(() => {
+      node.removeEventListener("transitionend", onEnd);
+      finish();
+    }, GROW_MS + 80);
+  }
+
+  return (
+    <>
+      <style>{`
+        .drink-preview::backdrop {
+          background: rgb(39 75 58 / 0.45);
+          opacity: 0;
+          transition: opacity ${GROW_MS}ms ease;
+        }
+        .drink-preview.shown::backdrop {
+          opacity: 1;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .drink-preview::backdrop { transition: none; }
+        }
+      `}</style>
+      <dialog
+        ref={dialog}
+        aria-label={drink?.name ?? "Drink"}
+        className="drink-preview m-auto w-[min(100%-2rem,24rem)] rounded-3xl border-0 bg-[#f7f4ec] p-0 text-[#274b3a] shadow-[0_24px_70px_rgb(39_75_58/0.28)]"
+        onClose={() => {
+          const node = dialog.current;
+          if (node) resetMotion(node);
+          if (drink) setSourceHidden(drink.name, false);
+          onClose();
+        }}
+        onCancel={(event) => {
+          event.preventDefault();
+          startClose();
+        }}
+        onClick={(event) => {
+          if (event.target === dialog.current) startClose();
+        }}
+      >
+        {drink ? (
+          <>
+            <DrinkPhoto imageUrl={drink.imageUrl} large flush />
+            <button
+              type="button"
+              data-close
+              data-reveal
+              onClick={startClose}
+              className="absolute top-3 right-3 z-10 rounded-full px-4 py-2 text-sm"
+              aria-label="Close"
+            >
+              Close
+            </button>
+            <div data-reveal className="px-5 pt-4 pb-5">
+              <h2 className="font-heading text-3xl leading-tight">{drink.name}</h2>
+              <p className="mt-3 text-base leading-relaxed whitespace-pre-line">{drink.description ?? "No description yet."}</p>
+            </div>
+          </>
+        ) : null}
+      </dialog>
+    </>
+  );
+}
+
+function readOrigin(source: HTMLElement): DrinkOrigin {
+  const photo = source.querySelector("[data-drink-photo]");
+  const rect = (photo instanceof HTMLElement ? photo : source).getBoundingClientRect();
+  return rectBox(rect);
+}
+
+function setSourceHidden(name: string, hidden: boolean) {
+  const photo = document.querySelector(`[data-drink-name="${CSS.escape(name)}"] [data-drink-photo]`);
+  if (!(photo instanceof HTMLElement)) return;
+  photo.style.opacity = hidden ? "0" : "";
+}
+
+function liveOrigin(name: string, fallback: DrinkOrigin): DrinkOrigin {
+  const photo = document.querySelector(`[data-drink-name="${CSS.escape(name)}"] [data-drink-photo]`);
+  if (!(photo instanceof HTMLElement)) return fallback;
+  const rect = photo.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return fallback;
+  return rectBox(rect);
+}
+
+function rectBox(rect: Pick<DOMRect, "top" | "left" | "width" | "height">): DrinkOrigin {
+  return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+}
+
+function place(node: HTMLDialogElement, box: DrinkOrigin, radius: string) {
+  node.style.position = "fixed";
+  node.style.margin = "0";
+  node.style.right = "auto";
+  node.style.bottom = "auto";
+  node.style.top = `${box.top}px`;
+  node.style.left = `${box.left}px`;
+  node.style.width = `${box.width}px`;
+  node.style.height = `${box.height}px`;
+  node.style.borderRadius = radius;
+  node.style.overflow = "hidden";
+  node.style.maxHeight = "none";
+  node.style.maxWidth = "none";
+}
+
+function resetMotion(node: HTMLDialogElement) {
+  node.classList.remove("shown");
+  node.style.cssText = "";
+  for (const copy of node.querySelectorAll<HTMLElement>("[data-reveal]")) copy.style.cssText = "";
+}
+
+function hideCopy(node: HTMLElement, animate = false) {
+  for (const copy of node.querySelectorAll<HTMLElement>("[data-reveal]")) {
+    copy.style.transition = animate ? "opacity 160ms ease" : "none";
+    copy.style.opacity = "0";
+  }
+}
+
+function showCopy(node: HTMLElement, animate: boolean) {
+  for (const copy of node.querySelectorAll<HTMLElement>("[data-reveal]")) {
+    copy.style.transition = animate ? "opacity 280ms ease 140ms" : "none";
+    copy.style.opacity = "1";
+  }
+}
+
+function DrinkPhoto({ imageUrl, large = false, flush = false }: { imageUrl: string | null; large?: boolean; flush?: boolean }) {
+  const frame = large ? "aspect-square w-full" : "h-11 w-11";
+  const radius = flush ? "rounded-none" : "rounded-2xl";
   if (!imageUrl) {
     return (
-      <span
-        aria-hidden="true"
-        className={`grid ${frame} shrink-0 place-items-center rounded-2xl ${onDark ? "bg-white/10 text-[#f7f4ec]" : "bg-[#e7f0ea] text-[#274b3a]"}`}
-      >
+      <span data-drink-photo aria-hidden="true" className={`grid ${frame} ${radius} shrink-0 place-items-center bg-[#e7f0ea] text-[#274b3a]`}>
         <CupMark />
       </span>
     );
@@ -125,7 +319,7 @@ function DrinkPhoto({
   return (
     // Square hosts the catalog photo. The drink name sits beside it.
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={imageUrl} alt="" className={`${frame} shrink-0 rounded-2xl bg-[#e7e4de] object-cover`} />
+    <img data-drink-photo src={imageUrl} alt="" className={`block ${frame} ${radius} shrink-0 bg-[#e7e4de] object-cover`} />
   );
 }
 
@@ -136,14 +330,5 @@ function CupMark() {
       <path d="M16 9h2.2a2.2 2.2 0 0 1 0 4.4H16" strokeLinecap="round" />
       <path d="M8 4.5c.4.8.4 1.4 0 2.2M12 4.5c.4.8.4 1.4 0 2.2" strokeLinecap="round" />
     </svg>
-  );
-}
-
-function ShareBar({ share, leader, onDark = false }: { share: number; leader: number; onDark?: boolean }) {
-  const width = leader > 0 ? Math.max(share > 0 ? 8 : 0, (share / leader) * 100) : 0;
-  return (
-    <div className={`h-1.5 overflow-hidden rounded-full ${onDark ? "bg-white/20" : "bg-[#e4e1da]"}`} aria-hidden="true">
-      <div className={`h-full rounded-full ${onDark ? "bg-[#f3f2ef]" : "bg-[#274b3a]"}`} style={{ width: `${width}%` }} />
-    </div>
   );
 }

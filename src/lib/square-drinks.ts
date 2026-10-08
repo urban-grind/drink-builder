@@ -18,6 +18,8 @@ type CatalogObject = {
   item_data?: {
     category_id?: string;
     categories?: { id?: string }[];
+    description?: string;
+    description_plaintext?: string;
     image_ids?: string[];
     variations?: { id?: string; is_deleted?: boolean }[];
   };
@@ -37,7 +39,7 @@ export type SquareOrder = {
   returns?: { created_at?: string; return_line_items?: SquareLine[] }[];
 };
 
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 type SalesCache = { version: number; at: number; rangeStart: string; sales: DrinkSale[] };
 
@@ -162,6 +164,29 @@ export function variationImageUrls(objects: readonly CatalogObject[]): Map<strin
   return images;
 }
 
+/** Square description for each drink size. Regular and Large share the item text. */
+export function variationDescriptions(objects: readonly CatalogObject[]): Map<string, string> {
+  const names = categoryNames(objects);
+  const descriptions = new Map<string, string>();
+  for (const object of objects) {
+    if (!isDrinkItem(object, names)) continue;
+    const description = itemDescription(object);
+    if (!description) continue;
+    for (const variation of object.item_data?.variations ?? []) {
+      if (variation.id && !variation.is_deleted) descriptions.set(variation.id, description);
+    }
+  }
+  return descriptions;
+}
+
+function itemDescription(object: CatalogObject): string | null {
+  const plain = object.item_data?.description_plaintext?.trim();
+  if (plain) return plain;
+  const description = object.item_data?.description?.trim();
+  if (description && !description.includes("<")) return description;
+  return null;
+}
+
 function httpsUrl(value: string | undefined): string | null {
   if (!value) return null;
   try {
@@ -177,14 +202,15 @@ export function salesFromOrders(
   orders: readonly SquareOrder[],
   allowed: ReadonlySet<string>,
   images: ReadonlyMap<string, string> = new Map(),
+  descriptions: ReadonlyMap<string, string> = new Map(),
 ): DrinkSale[] {
   const sales: DrinkSale[] = [];
   for (const order of orders) {
     const soldAt = order.closed_at || order.created_at;
-    if (soldAt) pushLines(sales, order.line_items ?? [], allowed, images, soldAt, 1);
+    if (soldAt) pushLines(sales, order.line_items ?? [], allowed, images, descriptions, soldAt, 1);
     for (const returned of order.returns ?? []) {
       const when = returned.created_at || soldAt;
-      if (when) pushLines(sales, returned.return_line_items ?? [], allowed, images, when, -1);
+      if (when) pushLines(sales, returned.return_line_items ?? [], allowed, images, descriptions, when, -1);
     }
   }
   return sales;
@@ -195,6 +221,7 @@ function pushLines(
   lines: readonly SquareLine[],
   allowed: ReadonlySet<string>,
   images: ReadonlyMap<string, string>,
+  descriptions: ReadonlyMap<string, string>,
   soldAt: string,
   sign: 1 | -1,
 ): void {
@@ -205,7 +232,14 @@ function pushLines(
     const quantity = Number(line.quantity);
     if (!id || !allowed.has(id) || !name || !Number.isFinite(quantity) || quantity <= 0) continue;
     const imageUrl = images.get(id);
-    sales.push(imageUrl ? { name, quantity: sign * quantity, soldAt, imageUrl } : { name, quantity: sign * quantity, soldAt });
+    const description = descriptions.get(id);
+    sales.push({
+      name,
+      quantity: sign * quantity,
+      soldAt,
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(description ? { description } : {}),
+    });
   }
 }
 
@@ -213,7 +247,7 @@ async function fetchSquareDrinkSales(rangeStart: string): Promise<DrinkSale[]> {
   const locationId = process.env.SQUARE_LOCATION_ID?.trim() ?? "";
   const catalog = await listCatalog();
   const orders = await listCompletedOrders(locationId, rangeStart);
-  return salesFromOrders(orders, allowedVariationIds(catalog), variationImageUrls(catalog));
+  return salesFromOrders(orders, allowedVariationIds(catalog), variationImageUrls(catalog), variationDescriptions(catalog));
 }
 
 async function listCatalog(): Promise<CatalogObject[]> {

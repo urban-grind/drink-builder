@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { allowedVariationIds, normalizeCategory, salesFromOrders, variationImageUrls } from "@/lib/square-drinks";
+import { allowedVariationIds, normalizeCategory, salesFromOrders, variationDescriptions, variationImageUrls } from "@/lib/square-drinks";
 import { rankDrinkSales } from "@/lib/drink-stats";
 
 describe("square drinks", () => {
@@ -38,6 +38,8 @@ describe("square drinks", () => {
         id: "latte",
         item_data: {
           category_id: "coffee",
+          description_plaintext: "  Steamed milk and espresso.  ",
+          description_html: "<p>Ignore this</p>",
           image_ids: ["latte-photo"],
           variations: [
             { id: "regular", is_deleted: false },
@@ -60,6 +62,20 @@ describe("square drinks", () => {
     assert.equal(images.get("large"), "https://cdn.example/latte.jpg");
     assert.equal(images.has("cookie-single"), false);
     assert.equal(images.has("tea-regular"), false);
+    const descriptions = variationDescriptions([
+      { type: "CATEGORY", id: "coffee", category_data: { name: "Coffee Based Beverages" } },
+      {
+        type: "ITEM",
+        id: "latte",
+        item_data: {
+          category_id: "coffee",
+          description_plaintext: "  Steamed milk and espresso.  ",
+          variations: [{ id: "regular" }, { id: "large" }],
+        },
+      },
+    ]);
+    assert.equal(descriptions.get("regular"), "Steamed milk and espresso.");
+    assert.equal(descriptions.get("large"), "Steamed milk and espresso.");
   });
 
   it("counts each size toward the product and removes a return", () => {
@@ -83,11 +99,13 @@ describe("square drinks", () => {
       ],
       allowed,
       new Map([["large", "https://cdn.example/latte.jpg"]]),
+      new Map([["large", "Our signature latte."]]),
     );
     const ranked = rankDrinkSales(sales, new Date("2026-10-08T19:00:00.000Z"));
     assert.equal(ranked.day[0]?.name, "Salty Blonde Latte");
     assert.equal(ranked.day[0]?.quantity, 2);
     assert.equal(ranked.day[0]?.share, 100);
     assert.equal(ranked.day[0]?.imageUrl, "https://cdn.example/latte.jpg");
+    assert.equal(ranked.day[0]?.description, "Our signature latte.");
   });
 });

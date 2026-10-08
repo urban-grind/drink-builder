@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { PhotoEntryForm } from "@/components/photo-entry-form";
+import { VoteAuditPanel } from "@/components/photo-vote-audit-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,7 @@ import { ApiRequestError, requestJson } from "@/lib/client-api";
 import { emptyContestReport, type ContestReport } from "@/lib/contest-report";
 import type { PersonRecord } from "@/lib/people";
 import { formatStoredPhone } from "@/lib/photo-validation";
-import type { PhotoStatus, ReviewPhoto } from "@/lib/photo-types";
+import type { PhotoStatus, ReviewPhoto, VoteAudit } from "@/lib/photo-types";
 
 type ReviewPayload = {
   configured: boolean;
@@ -34,6 +35,10 @@ export function PhotoReview() {
   const [adding, setAdding] = useState(false);
   const [addedNote, setAddedNote] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [auditId, setAuditId] = useState<string | null>(null);
+  const [audit, setAudit] = useState<VoteAudit | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditPending, setAuditPending] = useState(false);
 
   async function load() {
     const data = await requestJson<ReviewPayload>("/api/photos/review");
@@ -87,6 +92,27 @@ export function PhotoReview() {
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The review didn't save.");
+    }
+  }
+
+  async function toggleVotes(photo: ReviewPhoto) {
+    if (auditId === photo.id && !auditPending) {
+      setAuditId(null);
+      setAudit(null);
+      setAuditError(null);
+      return;
+    }
+    setAuditId(photo.id);
+    setAudit(null);
+    setAuditError(null);
+    setAuditPending(true);
+    try {
+      const data = await requestJson<{ audit: VoteAudit }>(`/api/photos/${photo.id}/votes`);
+      setAudit(data.audit);
+    } catch (caught) {
+      setAuditError(caught instanceof Error ? caught.message : "Those votes didn't load.");
+    } finally {
+      setAuditPending(false);
     }
   }
 
@@ -260,7 +286,16 @@ export function PhotoReview() {
                         Take down
                       </Button>
                     ) : null}
+                    <Button
+                      type="button"
+                      aria-pressed={auditId === photo.id}
+                      className="h-11 rounded-full px-4"
+                      onClick={() => void toggleVotes(photo)}
+                    >
+                      Votes
+                    </Button>
                   </div>
+                  {auditId === photo.id ? <VoteAuditPanel audit={audit} pending={auditPending} error={auditError} /> : null}
                 </li>
               ))}
             </ul>

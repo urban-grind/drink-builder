@@ -9,6 +9,7 @@ export type DrinkSale = {
   quantity: number;
   soldAt: string;
   imageUrl?: string;
+  description?: string;
 };
 
 export type DrinkTotal = {
@@ -17,6 +18,7 @@ export type DrinkTotal = {
   /** This drink's share of every drink sold in the same list, from 0 to 100. */
   share: number;
   imageUrl: string | null;
+  description: string | null;
 };
 
 export type DrinkStats = {
@@ -63,7 +65,7 @@ export function rankDrinkSales(sales: readonly DrinkSale[], now = new Date()): D
     const name = sale.name.trim();
     const soldAt = new Date(sale.soldAt);
     if (!name || !Number.isFinite(sale.quantity) || sale.quantity === 0 || Number.isNaN(soldAt.getTime())) return [];
-    return [{ name, key: name.toLocaleLowerCase(), quantity: sale.quantity, soldAt, imageUrl: sale.imageUrl }];
+    return [{ name, key: name.toLocaleLowerCase(), quantity: sale.quantity, soldAt, imageUrl: sale.imageUrl, description: sale.description }];
   });
   const monthRows = rows.filter((row) => sameMonth(row.soldAt, now));
   return {
@@ -80,7 +82,7 @@ export function drinkShareLabel(share: number): string {
   return `${Math.round(share)}%`;
 }
 
-function board(rows: { name: string; key: string; quantity: number; imageUrl?: string }[]): DrinkTotal[] {
+function board(rows: SaleRow[]): DrinkTotal[] {
   const ranked = totals(rows);
   const sold = ranked.reduce((sum, row) => sum + row.quantity, 0);
   return ranked.slice(0, DRINK_BOARD_SIZE).map((row) => ({
@@ -89,25 +91,30 @@ function board(rows: { name: string; key: string; quantity: number; imageUrl?: s
   }));
 }
 
-function totals(rows: { name: string; key: string; quantity: number; imageUrl?: string }[]): DrinkTotal[] {
-  const grouped = new Map<string, { name: string; nameQty: number; quantity: number; imageUrl: string | null }>();
+type SaleRow = { name: string; key: string; quantity: number; imageUrl?: string; description?: string };
+
+function totals(rows: SaleRow[]): DrinkTotal[] {
+  const grouped = new Map<string, { name: string; nameQty: number; quantity: number; imageUrl: string | null; description: string | null }>();
   for (const row of rows) {
     const imageUrl = row.imageUrl || null;
+    const description = row.description?.trim() || null;
     const current = grouped.get(row.key);
     if (!current) {
-      grouped.set(row.key, { name: row.name, nameQty: row.quantity, quantity: row.quantity, imageUrl });
+      grouped.set(row.key, { name: row.name, nameQty: row.quantity, quantity: row.quantity, imageUrl, description });
       continue;
     }
     current.quantity += row.quantity;
     if (!current.imageUrl && imageUrl) current.imageUrl = imageUrl;
+    if (!current.description && description) current.description = description;
     if (row.quantity > current.nameQty) {
       current.name = row.name;
       current.nameQty = row.quantity;
       if (imageUrl) current.imageUrl = imageUrl;
+      if (description) current.description = description;
     }
   }
   return [...grouped.values()]
-    .map((row) => ({ name: row.name, quantity: row.quantity, share: 0, imageUrl: row.imageUrl }))
+    .map((row) => ({ name: row.name, quantity: row.quantity, share: 0, imageUrl: row.imageUrl, description: row.description }))
     .filter((row) => row.quantity > 0)
     .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
 }
