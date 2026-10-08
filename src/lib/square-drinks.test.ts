@@ -39,7 +39,6 @@ describe("square drinks", () => {
         item_data: {
           category_id: "coffee",
           description_plaintext: "  Steamed milk and espresso.  ",
-          description_html: "<p>Ignore this</p>",
           image_ids: ["latte-photo"],
           variations: [
             { id: "regular", is_deleted: false },
