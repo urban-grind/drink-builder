@@ -13,6 +13,7 @@ import { easternDayRange } from "@/lib/eastern-day";
 import { parsePhotoContact, validatePhotoEntry } from "@/lib/photo-validation";
 import { dealDeck } from "@/lib/deck-order";
 import { LEADERBOARD_SIZE } from "@/lib/photo-standing";
+import type { FieldErrors } from "@/lib/types";
 
 export const NEW_PHOTO_LIMIT = 10;
 
