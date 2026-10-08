@@ -50,7 +50,8 @@ describe("photo vote audit", () => {
     insertVote(photoId, randomUUID(), "2026-10-08T14:00:00.000Z", cafe, true);
     insertVote(photoId, randomUUID(), "2026-10-08T14:10:00.000Z", cafe, true);
     insertVote(photoId, randomUUID(), "2026-10-08T14:20:00.000Z", cafe, true);
-    insertVote(photoId, randomUUID(), "2026-10-08T14:30:00.000Z", cafe, false);
+    const pageVoter = randomUUID();
+    insertVote(photoId, pageVoter, "2026-10-08T14:30:00.000Z", cafe, false);
     insertVote(photoId, randomUUID(), "2026-10-08T15:00:00.000Z", null, true);
     const shared = randomUUID();
     insertVote(photoId, shared, "2026-10-08T16:00:00.000Z", cell, true);
@@ -69,6 +70,11 @@ describe("photo vote audit", () => {
     assert.match(audit.networks[0]?.when ?? "", /10:30/);
     assert.equal(audit.networks[1]?.label, "No network recorded");
     assert.equal(audit.networks[2]?.label, "Network 2");
+    assert.equal(audit.votes[0]?.browserId, shared);
+    assert.equal(audit.votes[0]?.page, "Swipe");
+    const fromPage = audit.votes.find((vote) => vote.browserId === pageVoter);
+    assert.equal(fromPage?.page, "Photo page");
+    assert.match(fromPage?.at ?? "", /10:30:00/);
     assert.equal(auditPhotoVotes(randomUUID()), null);
   });
 });

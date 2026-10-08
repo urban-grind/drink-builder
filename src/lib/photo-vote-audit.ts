@@ -4,13 +4,14 @@ import type { VoteAudit } from "@/lib/photo-types";
 const EASTERN = "America/Toronto";
 
 type VoteRow = {
+  voter_id: string;
   created_at: string;
   network_hash: string | null;
   from_deck: number;
   voter_votes: number;
 };
 
-/** Groups one photo's votes so a reviewer can see clusters without seeing browser ids or addresses. */
+/** One photo's votes for the private review page. */
 export function auditPhotoVotes(photoId: string): VoteAudit | null {
   const db = getDb();
   const found = db.prepare("SELECT 1 AS found FROM photo_entries WHERE id = ?").get(photoId);
@@ -18,7 +19,7 @@ export function auditPhotoVotes(photoId: string): VoteAudit | null {
 
   const rows = db
     .prepare(
-      `SELECT v.created_at, v.network_hash,
+      `SELECT v.voter_id, v.created_at, v.network_hash,
          EXISTS (
            SELECT 1 FROM photo_swipes s
            WHERE s.photo_id = v.photo_id AND s.voter_id = v.voter_id AND s.action = 'vote'
@@ -63,21 +64,27 @@ export function auditPhotoVotes(photoId: string): VoteAudit | null {
       networkNumber += 1;
       return { label: `Network ${networkNumber}`, votes: group.votes, when: whenLabel(group.firstAt, group.lastAt) };
     }),
+    votes: [...rows].reverse().map((row) => ({
+      at: easternStamp(row.created_at, true),
+      browserId: row.voter_id,
+      page: Number(row.from_deck) === 1 ? "Swipe" : "Photo page",
+    })),
   };
 }
 
 function whenLabel(start: string, end: string): string {
-  const from = easternStamp(start);
-  const to = easternStamp(end);
+  const from = easternStamp(start, false);
+  const to = easternStamp(end, false);
   return from === to ? from : `${from} – ${to}`;
 }
 
-function easternStamp(iso: string): string {
+function easternStamp(iso: string, withSeconds: boolean): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: EASTERN,
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...(withSeconds ? { second: "2-digit" } : {}),
   }).format(new Date(iso));
 }

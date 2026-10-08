@@ -33,7 +33,7 @@ export type ReviewPhoto = PublicPhoto & {
   status: PhotoStatus;
 };
 
-/** Review-only shape of one photo's votes. Network labels are groups, not addresses. */
+/** Review-only shape of one photo's votes. Browser ids are the anonymous ids stored in each browser. */
 export type VoteAudit = {
   voteCount: number;
   networkCount: number;
@@ -41,6 +41,7 @@ export type VoteAudit = {
   fromPhotoPage: number;
   onlyThisPhoto: number;
   networks: { label: string; votes: number; when: string }[];
+  votes: { at: string; browserId: string; page: "Swipe" | "Photo page" }[];
 };
 
 /** Public board totals, plus what arrived since midnight Eastern. */
