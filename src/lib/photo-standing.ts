@@ -56,3 +56,17 @@ export function ownerStandingLine(input: {
   }
   return `${votes} · ${place}`;
 }
+
+/** How fast this photo is collecting votes. Null until the first vote. */
+export function ownerPaceLine(input: { voteCount: number; votesToday: number; daysLive: number }): string | null {
+  if (input.voteCount <= 0) return null;
+  const today = `${input.votesToday} today`;
+  if (input.daysLive < 2) return today;
+  return `${today} · about ${votesPerDay(input.voteCount, input.daysLive)} a day`;
+}
+
+function votesPerDay(voteCount: number, daysLive: number): string {
+  const rate = voteCount / Math.max(1, daysLive);
+  const rounded = rate >= 10 ? Math.round(rate) : Math.round(rate * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}

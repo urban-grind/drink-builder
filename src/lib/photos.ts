@@ -9,7 +9,7 @@ import { ensureSamplePhotos, localSampleAsset, samplePhotosEnabled } from "@/lib
 import { isUuid } from "@/lib/validation";
 import { getPhotoStorage } from "@/lib/r2";
 import type { ContestActivity, LeaderboardEntry, OwnedPhoto, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
-import { easternDayRange } from "@/lib/eastern-day";
+import { easternDayRange, easternDaySpan } from "@/lib/eastern-day";
 import { parsePhotoContact, validatePhotoEntry } from "@/lib/photo-validation";
 import { dealDeck } from "@/lib/deck-order";
 import { LEADERBOARD_SIZE } from "@/lib/photo-standing";
@@ -602,14 +602,48 @@ function boardStandings(): Map<string, { rank: number; votesFromFirst: number | 
   return standingsFor(rows.map((row) => ({ id: row.id, voteCount: Number(row.vote_count) })));
 }
 
-function toOwned(row: EntryRow, standings: Map<string, { rank: number; votesFromFirst: number | null }>): OwnedPhoto {
+function toOwned(
+  row: EntryRow,
+  standings: Map<string, { rank: number; votesFromFirst: number | null }>,
+  votesToday: number,
+  now: Date,
+): OwnedPhoto {
   const standing = row.status === "approved" ? standings.get(row.id) : undefined;
+  const published = new Date(row.reviewed_at ?? row.created_at);
   return {
     ...toPublic(row),
     status: row.status === "approved" ? "approved" : "pending",
     rank: standing?.rank ?? null,
     votesFromFirst: standing?.votesFromFirst ?? null,
+    votesToday,
+    daysLive: easternDaySpan(published, now),
   };
+}
+
+function votesTodayByPhoto(ids: readonly string[], now: Date): Map<string, number> {
+  if (ids.length === 0) return new Map();
+  const { start, end } = easternDayRange(now);
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = getDb()
+    .prepare(
+      `SELECT photo_id, COUNT(*) AS votes FROM photo_votes
+       WHERE photo_id IN (${placeholders}) AND created_at >= ? AND created_at < ?
+       GROUP BY photo_id`,
+    )
+    .all(...ids, start, end) as { photo_id: string; votes: number }[];
+  return new Map(rows.map((row) => [row.photo_id, Number(row.votes)]));
+}
+
+function withPace(
+  rows: EntryRow[],
+  standings: Map<string, { rank: number; votesFromFirst: number | null }>,
+  now = new Date(),
+): OwnedPhoto[] {
+  const today = votesTodayByPhoto(
+    rows.map((row) => row.id),
+    now,
+  );
+  return rows.map((row) => toOwned(row, standings, today.get(row.id) ?? 0, now));
 }
 
 /** Photos this browser already saved. Rejected and removed rows stay off the list. */
@@ -626,7 +660,7 @@ export function listOwnedPhotos(ids: readonly string[], voterId: string | null):
     )
     .all(voterId ?? "", ...unique, sampleVisibilityFlag()) as EntryRow[];
   const standings = boardStandings();
-  return rows.map((row) => toOwned(row, standings));
+  return withPace(rows, standings);
 }
 
 /** Every pending or approved photo for an email or phone. An unknown contact is an empty list. */
@@ -657,7 +691,7 @@ export function findOwnedPhotosByContact(
     )
     .all(voterId ?? "", ...params, sampleVisibilityFlag()) as EntryRow[];
   const standings = boardStandings();
-  return { ok: true, photos: rows.map((row) => toOwned(row, standings)) };
+  return { ok: true, photos: withPace(rows, standings) };
 }
 
 export async function submitPhoto(input: {

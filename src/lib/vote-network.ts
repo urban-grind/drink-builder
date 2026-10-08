@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 export const NETWORK_VOTES_PER_PHOTO = 3;
 
 /** Rolling window for that cap. */
-export const NETWORK_VOTE_WINDOW_MS = 5 * 60 * 1000;
+export const NETWORK_VOTE_WINDOW_MS = 10 * 60 * 1000;
 
 export const NETWORK_VOTE_LIMIT_MESSAGE = "This photo already has 3 votes from this location.";
 

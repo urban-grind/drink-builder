@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CafeLink } from "@/components/cafe-link";
 import { DrawEntryDialog } from "@/components/draw-entry-dialog";
@@ -70,7 +71,7 @@ function CardFace({ photo }: { photo: PublicPhoto }) {
   );
 }
 
-export function PhotoDeck({ entryCode }: { entryCode?: string }) {
+export function PhotoDeck({ entryCode, drinkStats = false }: { entryCode?: string; drinkStats?: boolean }) {
   const router = useRouter();
   const { voterId, ready } = useVoter();
   const [photos, setPhotos] = useState<PublicPhoto[]>([]);
@@ -831,7 +832,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
 
       {screen !== "upload" ? (
       <nav aria-label="Contest" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] md:px-10 md:pb-5">
-        <div className="pointer-events-auto grid w-full max-w-[24rem] grid-cols-4 rounded-full bg-[#274b3a] px-1.5 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.28)] md:max-w-7xl md:px-2 md:py-1.5">
+        <div className={`pointer-events-auto grid w-full ${drinkStats ? "max-w-[28rem] grid-cols-5" : "max-w-[24rem] grid-cols-4"} rounded-full bg-[#274b3a] px-1.5 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.28)] md:max-w-7xl md:px-2 md:py-1.5`}>
           {(
             [
               ["vote", "Vote"],
@@ -857,6 +858,15 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             </button>
             );
           })}
+          {drinkStats ? (
+            <Link
+              href="/top-drinks"
+              className="flex flex-col items-center gap-0.5 rounded-full px-1.5 py-1 text-xs leading-none font-semibold whitespace-nowrap text-white/85 md:flex-row md:justify-center md:gap-2 md:px-4 md:py-2 md:text-base"
+            >
+              <CupMark />
+              Drinks
+            </Link>
+          ) : null}
         </div>
       </nav>
       ) : null}
@@ -926,6 +936,16 @@ function FaqMark() {
       <circle cx="12" cy="12" r="8.25" />
       <path d="M9.6 9.4a2.4 2.4 0 1 1 3.3 2.2c-.8.4-1.3.9-1.3 1.8" />
       <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+function CupMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 8h8.5a2.5 2.5 0 0 1 0 5H15" />
+      <path d="M7 5h8v8a4 4 0 0 1-8 0V5z" />
+      <path d="M8 20h8" />
     </svg>
   );
 }

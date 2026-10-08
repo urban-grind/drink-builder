@@ -674,6 +674,12 @@ describe("photo contest", { concurrency: false }, () => {
       const skipResult = swipeDeckPhoto(skipped.id, voter, "skip");
       assert.equal(skipResult.ok, true);
       assert.equal(getPublicPhoto(skipped.id, voter)?.voteCount, skipped.voteCount);
+      assert.equal(getPublicPhoto(skipped.id, voter)?.voted, false);
+      const detailAfterSkip = castPhotoVote(skipped.id, voter);
+      assert.equal(detailAfterSkip.ok, true);
+      getDb().prepare("DELETE FROM photo_votes WHERE photo_id = ? AND voter_id = ?").run(skipped.id, voter);
+      assert.equal(getPublicPhoto(skipped.id, voter)?.voteCount, skipped.voteCount);
+      assert.equal(getPublicPhoto(skipped.id, voter)?.voted, false);
       assert.equal(
         everyDealtPhoto(voter).some((photo) => photo.id === skipped.id),
         false,
@@ -683,6 +689,10 @@ describe("photo contest", { concurrency: false }, () => {
       const voteResult = swipeDeckPhoto(voted.id, voter, "vote");
       assert.equal(voteResult.ok, true);
       assert.equal(getPublicPhoto(voted.id, voter)?.voteCount, before + 1);
+      assert.equal(getPublicPhoto(voted.id, voter)?.voted, true);
+      const detailAfterVote = castPhotoVote(voted.id, voter);
+      assert.equal(detailAfterVote.ok, false);
+      if (!detailAfterVote.ok) assert.equal(detailAfterVote.code, "ALREADY_VOTED");
       assert.equal(
         everyDealtPhoto(voter).some((photo) => photo.id === voted.id),
         false,
@@ -1204,6 +1214,37 @@ describe("photo contest", { concurrency: false }, () => {
       db.prepare("DELETE FROM photo_swipes WHERE photo_id IN (?, ?) OR voter_id = ?").run(freshId, tiredId, voter);
       db.prepare("DELETE FROM photo_votes WHERE photo_id IN (?, ?)").run(freshId, tiredId);
       db.prepare("DELETE FROM photo_entries WHERE id IN (?, ?)").run(freshId, tiredId);
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("counts today's votes apart from older ones on my entries", () => {
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+    const db = getDb();
+    const id = crypto.randomUUID();
+    try {
+      env.NODE_ENV = "production";
+      const now = new Date();
+      const published = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString();
+      const older = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString();
+      db.prepare(
+        `INSERT INTO photo_entries (
+          id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, reviewed_at, public_code
+        ) VALUES (?, 'Ada', NULL, NULL, 'Pace cup', '', 'approved', ?, 'image/jpeg', 'vote', 'thumb', ?, ?, 'pace01')`,
+      ).run(id, `pace/${id}`, published, published);
+      const vote = db.prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at) VALUES (?, ?, ?)");
+      vote.run(id, crypto.randomUUID(), older);
+      vote.run(id, crypto.randomUUID(), now.toISOString());
+      const [photo] = listOwnedPhotos([id], null);
+      assert.ok(photo);
+      assert.equal(photo.voteCount, 2);
+      assert.equal(photo.votesToday, 1);
+      assert.ok(photo.daysLive >= 4);
+    } finally {
+      db.prepare("DELETE FROM photo_votes WHERE photo_id = ?").run(id);
+      db.prepare("DELETE FROM photo_entries WHERE id = ?").run(id);
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
     }

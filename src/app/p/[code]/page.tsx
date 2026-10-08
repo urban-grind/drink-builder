@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { PhotoDeck } from "@/components/photo-deck";
+import { drinkStatsEnabled } from "@/lib/drink-stats";
 import { getPublicPhotoByCode } from "@/lib/photos";
 import { photoShareCard, photoShareImagePath, requestOrigin } from "@/lib/photo-share-card";
 
@@ -38,5 +39,5 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
 
 export default async function ShortPhotoPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  return <PhotoDeck entryCode={code} />;
+  return <PhotoDeck entryCode={code} drinkStats={drinkStatsEnabled()} />;
 }

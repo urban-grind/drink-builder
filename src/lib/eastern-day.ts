@@ -1,5 +1,24 @@
 const EASTERN = "America/Toronto";
 
+/** How many Eastern midnights a photo has been up, counting today as one. */
+export function easternDaySpan(from: Date, to: Date): number {
+  const start = easternDayIndex(from);
+  const end = easternDayIndex(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 1;
+  return Math.max(1, end - start + 1);
+}
+
+function easternDayIndex(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  return Date.UTC(pick("year"), pick("month") - 1, pick("day")) / 86_400_000;
+}
+
 /** Midnight-to-midnight Eastern, as UTC instants. Contest dates use this clock. */
 export function easternDayRange(now = new Date()): { start: string; end: string } {
   const start = zonedMidnight(now, EASTERN);

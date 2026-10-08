@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PhotoDeck } from "@/components/photo-deck";
+import { drinkStatsEnabled } from "@/lib/drink-stats";
 
 export const metadata: Metadata = {
   title: { absolute: "Urban Grind Photo Content" },
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  return <PhotoDeck />;
+  return <PhotoDeck drinkStats={drinkStatsEnabled()} />;
 }

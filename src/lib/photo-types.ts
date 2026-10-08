@@ -21,6 +21,10 @@ export type OwnedPhoto = PublicPhoto & {
   rank: number | null;
   /** Votes still needed to catch first place. Null when that gap is not a useful number. */
   votesFromFirst: number | null;
+  /** Yes votes since midnight Eastern. */
+  votesToday: number;
+  /** Eastern days since the photo went up, counting today. */
+  daysLive: number;
 };
 
 export type ReviewPhoto = PublicPhoto & {

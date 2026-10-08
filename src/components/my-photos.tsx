@@ -3,7 +3,8 @@
 import { useEffect, useId, useState } from "react";
 import { ContactField } from "@/components/contact-field";
 import { Button } from "@/components/ui/button";
-import { ownerStandingLine, showsOnLeaderboard } from "@/lib/photo-standing";
+import { ownerPaceLine, ownerStandingLine, showsOnLeaderboard } from "@/lib/photo-standing";
+import { VoteBadges } from "@/components/vote-badges";
 import { formatStoredPhone, parseTypedContact } from "@/lib/photo-validation";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
 import { rememberMyPhoto } from "@/lib/local-votes";
@@ -110,12 +111,18 @@ export function MyPhotos({
 
       {status === "ready" && photos.length > 0 ? (
         <ul className="grid gap-3">
-          {photos.map((photo) => (
-            <li key={photo.id}>
+          {photos.map((photo) => {
+            const pace = ownerPaceLine({
+              voteCount: photo.voteCount,
+              votesToday: photo.votesToday,
+              daysLive: photo.daysLive,
+            });
+            return (
+            <li key={photo.id} className="rounded-2xl bg-white p-2 shadow-[0_10px_24px_rgb(39_75_58/0.05)]">
               <button
                 type="button"
                 onClick={() => onOpen(photo)}
-                className="flex w-full items-center gap-3 rounded-2xl bg-white p-2 text-left shadow-[0_10px_24px_rgb(39_75_58/0.05)]"
+                className="flex w-full items-center gap-3 text-left"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photo.thumbUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
@@ -132,10 +139,13 @@ export function MyPhotos({
                       votesFromFirst: photo.votesFromFirst,
                     })}
                   </span>
+                  {pace ? <span className="mt-0.5 block text-sm font-semibold text-[#274b3a]">{pace}</span> : null}
                 </span>
               </button>
+              <VoteBadges voteCount={photo.voteCount} />
             </li>
-          ))}
+            );
+          })}
         </ul>
       ) : null}
 

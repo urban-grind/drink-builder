@@ -1,125 +1,149 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { CupPhoto } from "@/components/cup-photo";
-import { useVoter } from "@/components/use-voter";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { replaceVoteIds } from "@/lib/local-votes";
-import type { PublicDrink } from "@/lib/types";
+import { useState } from "react";
+import { drinkShareLabel, type DrinkStats, type DrinkTotal } from "@/lib/drink-stats";
 
-function ShowcaseCard({ drink, rank }: { drink: PublicDrink; rank: number }) {
+const TABS = [
+  ["day", "Today", "The #1 pick today"],
+  ["week", "This week", "The #1 pick this week"],
+  ["month", "This month", "The #1 pick this month"],
+] as const;
+
+const PREVIEW = 5;
+
+export function TopDrinks({ stats }: { stats: DrinkStats }) {
+  const [tab, setTab] = useState<(typeof TABS)[number][0]>("day");
+  const [open, setOpen] = useState(false);
+  const current = TABS.find((item) => item[0] === tab) ?? TABS[0];
+  const drinks = stats[current[0]];
+  const shown = open ? drinks : drinks.slice(0, PREVIEW);
+  const leader = shown[0];
+  const rest = shown.slice(1);
+  const leaderShare = drinks[0]?.share ?? 0;
+
   return (
-    <li className="flex min-w-0 flex-col gap-4 rounded-2xl bg-white px-5 py-7 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-      <p className="font-heading text-5xl leading-none">
-        <span className="sr-only">Rank </span>
-        {rank}
-      </p>
-      <CupPhoto drink={drink} className="mx-auto h-auto w-full max-w-[260px]" />
-      <h3 className="text-3xl leading-tight text-balance">
-        <Link
-          href={`/drinks/${drink.id}`}
-          className="rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-[#274b3a]/40"
-        >
-          {drink.name}
-        </Link>
-      </h3>
-      <p>{drink.creatorName}</p>
+    <div className="mx-auto w-full max-w-3xl">
+      <div role="tablist" aria-label="Drink rankings" className="flex flex-wrap items-center gap-1">
+        {TABS.map(([key, title]) => {
+          const selected = tab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => {
+                setTab(key);
+                setOpen(false);
+              }}
+              className={
+                selected
+                  ? "rounded-full bg-[#274b3a] px-5 py-2.5 text-sm font-semibold text-[#f7f4ec]"
+                  : "!rounded-full !bg-transparent px-4 py-2.5 text-sm font-semibold !text-[#274b3a]/70 hover:!bg-transparent"
+              }
+            >
+              {title}
+            </button>
+          );
+        })}
+      </div>
+
+      {leader ? (
+        <div className="mt-6 flex items-center gap-5 rounded-[1.35rem] bg-[#274b3a] px-6 py-7 text-[#f7f4ec] sm:gap-8 sm:px-8 sm:py-8">
+          <DrinkPhoto imageUrl={leader.imageUrl} large onDark />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold tracking-[0.18em] text-[#f7f4ec]/75 uppercase">{current[2]}</p>
+            <h1 className="mt-3 font-heading text-4xl leading-tight sm:text-5xl">{leader.name}</h1>
+            <p className="sr-only">{drinkShareLabel(leader.share)} of drinks ordered</p>
+            <div className="mt-6 w-40 max-w-full">
+              <ShareBar share={leader.share} leader={leaderShare} onDark />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-[#274b3a]/70">No drinks yet.</p>
+      )}
+
+      {rest.length > 0 ? (
+        <ol className="mt-6" start={2}>
+          {rest.map((drink, index) => (
+            <DrinkRow key={drink.name} drink={drink} rank={index + 2} leader={leaderShare} />
+          ))}
+        </ol>
+      ) : null}
+
+      <div className="mt-8 flex items-center justify-between gap-4 text-sm">
+        <p className="text-[#274b3a]/60">Based on drinks sold · Eastern time</p>
+        {drinks.length > PREVIEW ? (
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            className="!bg-transparent !px-0 !py-0 font-semibold !text-[#274b3a] underline underline-offset-4 hover:!bg-transparent"
+          >
+            {open ? "Show fewer" : "See more favourites"}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DrinkRow({ drink, rank, leader }: { drink: DrinkTotal; rank: number; leader: number }) {
+  return (
+    <li className="flex items-center gap-4 border-t border-[#274b3a]/12 py-4">
+      <span className="w-6 shrink-0 text-[#7d9488]">{rank}</span>
+      <DrinkPhoto imageUrl={drink.imageUrl} />
+      <p className="min-w-0 flex-1 font-semibold text-[#274b3a]">{drink.name}</p>
+      <div className="w-24 shrink-0 sm:w-32">
+        <ShareBar share={drink.share} leader={leader} />
+      </div>
+      <span className="sr-only">{drinkShareLabel(drink.share)} of drinks ordered</span>
     </li>
   );
 }
 
-export function TopDrinks() {
-  const { voterId, ready } = useVoter();
-  const [popular, setPopular] = useState<PublicDrink[]>([]);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("The top drinks didn't load.");
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    if (!ready || !voterId) return;
-    const controller = new AbortController();
-
-    requestJson<{ popular: PublicDrink[]; newest: PublicDrink[] }>(
-      `/api/drinks?${new URLSearchParams({ voterId }).toString()}`,
-      { signal: controller.signal },
-    )
-      .then((data) => {
-        const voted = new Set<string>();
-        for (const drink of [...data.popular, ...data.newest]) {
-          if (drink.voted) voted.add(drink.id);
-        }
-        replaceVoteIds([...voted]);
-        setPopular(data.popular);
-        setStatus("ready");
-      })
-      .catch((caught) => {
-        if (controller.signal.aborted) return;
-        setStatus("error");
-        setError(caught instanceof ApiRequestError ? caught.message : "The top drinks didn't load.");
-      });
-
-    return () => controller.abort();
-  }, [ready, voterId, reloadKey]);
-
-  const ranked = popular.slice(0, 3);
-
+function DrinkPhoto({
+  imageUrl,
+  large = false,
+  onDark = false,
+}: {
+  imageUrl: string | null;
+  large?: boolean;
+  onDark?: boolean;
+}) {
+  const frame = large ? "h-24 w-24 sm:h-32 sm:w-32" : "h-11 w-11";
+  if (!imageUrl) {
+    return (
+      <span
+        aria-hidden="true"
+        className={`grid ${frame} shrink-0 place-items-center rounded-2xl ${onDark ? "bg-white/10 text-[#f7f4ec]" : "bg-[#e7f0ea] text-[#274b3a]"}`}
+      >
+        <CupMark />
+      </span>
+    );
+  }
   return (
-    <section aria-labelledby="top-drinks" className="flex flex-col gap-6">
-      <div>
-        <h2 id="top-drinks" className="text-4xl text-balance sm:text-5xl">
-          What Barrie is drinking
-        </h2>
-        <p className="mt-3 max-w-2xl text-pretty">The three cups with the most votes.</p>
-      </div>
+    // Square hosts the catalog photo. The drink name sits beside it.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={imageUrl} alt="" className={`${frame} shrink-0 rounded-2xl bg-[#e7e4de] object-cover`} />
+  );
+}
 
-      {status === "loading" ? (
-        <div role="status" aria-live="polite" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <p className="sr-only">Loading the top drinks</p>
-          {Array.from({ length: 3 }, (_, index) => (
-            <div key={index} className="h-[28rem] animate-pulse rounded-2xl bg-white" />
-          ))}
-        </div>
-      ) : null}
+function CupMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+      <path d="M6 8h10v6a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V8z" />
+      <path d="M16 9h2.2a2.2 2.2 0 0 1 0 4.4H16" strokeLinecap="round" />
+      <path d="M8 4.5c.4.8.4 1.4 0 2.2M12 4.5c.4.8.4 1.4 0 2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-      {status === "error" ? (
-        <div role="alert" className="rounded-2xl bg-white px-5 py-8">
-          <h3 className="text-2xl">The top drinks didn&apos;t load</h3>
-          <p className="mt-2">{error}</p>
-          <Button
-            type="button"
-            onClick={() => {
-              setStatus("loading");
-              setReloadKey((value) => value + 1);
-            }}
-            className="mt-4 h-11 rounded-full px-4"
-          >
-            Try again
-          </Button>
-        </div>
-      ) : null}
-
-      {status === "ready" && ranked.length === 0 ? (
-        <div className="rounded-2xl bg-white px-5 py-8">
-          <h3 className="text-2xl">No drinks on the board yet</h3>
-          <p className="mt-2">Build the first cup below.</p>
-        </div>
-      ) : null}
-
-      {status === "ready" && ranked.length > 0 ? (
-        <>
-          <ol className="grid list-none grid-cols-1 gap-4 lg:grid-cols-3">
-            {ranked.map((drink, index) => (
-              <ShowcaseCard key={drink.id} drink={drink} rank={index + 1} />
-            ))}
-          </ol>
-          <Link href="/drinks" className={cn(buttonVariants(), "h-11 w-fit rounded-full px-5")}>
-            See the board
-          </Link>
-        </>
-      ) : null}
-    </section>
+function ShareBar({ share, leader, onDark = false }: { share: number; leader: number; onDark?: boolean }) {
+  const width = leader > 0 ? Math.max(share > 0 ? 8 : 0, (share / leader) * 100) : 0;
+  return (
+    <div className={`h-1.5 overflow-hidden rounded-full ${onDark ? "bg-white/20" : "bg-[#e4e1da]"}`} aria-hidden="true">
+      <div className={`h-full rounded-full ${onDark ? "bg-[#f3f2ef]" : "bg-[#274b3a]"}`} style={{ width: `${width}%` }} />
+    </div>
   );
 }
