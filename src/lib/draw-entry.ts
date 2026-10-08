@@ -1,5 +1,5 @@
 import { getDb, isUniqueConstraint } from "@/lib/db";
-import { parseDrawEntry } from "@/lib/photo-validation";
+import { formatStoredPhone, parseDrawEntry } from "@/lib/photo-validation";
 import type { FieldErrors } from "@/lib/types";
 import { isUuid } from "@/lib/validation";
 
@@ -29,6 +29,21 @@ export function countDrawSwipes(voterId: string): number {
 
 export function drawProgress(voterId: string): { known: boolean; swipes: number } {
   return { known: drawEntrantKnown(voterId), swipes: countDrawSwipes(voterId) };
+}
+
+/** Name and contact this browser already saved, ready to drop into the photo form. */
+export function drawEntrantProfile(voterId: string): { personName: string; contact: string } | null {
+  if (!isUuid(voterId)) return null;
+  const row = getDb()
+    .prepare("SELECT person_name, email, phone FROM draw_entrants WHERE voter_id = ?")
+    .get(voterId) as EntrantRow | undefined;
+  if (!row) return null;
+  const personName = row.person_name.trim();
+  const email = row.email?.trim() ?? "";
+  const phone = row.phone?.trim() ?? "";
+  const contact = email || (phone.length === 10 ? formatStoredPhone(phone) : phone);
+  if (!personName || !contact) return null;
+  return { personName, contact };
 }
 
 /**

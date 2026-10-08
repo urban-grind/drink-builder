@@ -1,5 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api";
-import { claimDrawEntrant, drawProgress, saveDrawEntrant } from "@/lib/draw-entry";
+import { claimDrawEntrant, drawEntrantProfile, drawProgress, saveDrawEntrant } from "@/lib/draw-entry";
 import { readPhotoJson } from "@/lib/photo-http";
 import { safeErrorText } from "@/lib/safe-log";
 import { isUuid, parseVoterId } from "@/lib/validation";
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     voterId?: unknown;
     photoIds?: unknown;
     personName?: unknown;
+    profile?: unknown;
   };
   const voter = parseVoterId(record.voterId);
   if (!voter.ok) {
@@ -28,6 +29,10 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (record.profile === true) {
+      const profile = drawEntrantProfile(voter.voterId);
+      return jsonOk({ personName: profile?.personName ?? "", contact: profile?.contact ?? "" });
+    }
     if (typeof record.personName === "string") {
       const saved = saveDrawEntrant(voter.voterId, record);
       if (!saved.ok) return jsonError(400, saved.code, saved.message, saved.fields);

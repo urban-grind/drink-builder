@@ -56,6 +56,7 @@ describe("coming soon gate", () => {
     assert.equal(comingSoonAllowsAsset("/coming-soon/latte-lot.jpg"), true);
     assert.equal(comingSoonAllowsAsset("/coming-soon/stats"), true);
     assert.equal(comingSoonAllowsAsset("/api/coming-soon/hit"), true);
+    assert.equal(comingSoonAllowsAsset("/api/contest/hit"), true);
     assert.equal(comingSoonAllowsAsset("/photos/cup.jpg"), false);
     assert.equal(comingSoonAllowsAsset("/api/photos"), false);
     assert.equal(comingSoonAllowsAsset("/p/uu3goo"), false);

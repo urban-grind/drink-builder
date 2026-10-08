@@ -18,6 +18,7 @@ import { useSwipeDemo } from "@/components/use-swipe-demo";
 import { useVoter } from "@/components/use-voter";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { trackContest } from "@/lib/contest-track";
 import { photoEntryPath } from "@/lib/first-name";
 import type { PublicPhoto } from "@/lib/photo-types";
 
@@ -50,12 +51,16 @@ function wait(ms: number): Promise<void> {
 function CardFace({ photo }: { photo: PublicPhoto }) {
   const date = shortDate(photo.createdAt);
   const name = photo.personName.trim();
+  const drink = photo.drinkName.trim();
+  const caption = photo.caption.trim();
+  const showCaption = caption.length > 0 && caption !== drink;
+  const alt = [drink, showCaption ? caption : ""].filter(Boolean).join(". ") || name || "Contest photo";
   return (
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photo.imageUrl}
-        alt={photo.drinkName}
+        alt={alt}
         draggable={false}
         className="pointer-events-none absolute inset-0 h-full w-full object-cover"
       />
@@ -64,7 +69,8 @@ function CardFace({ photo }: { photo: PublicPhoto }) {
           {name}
           {date ? ` · ${date}` : ""}
         </p>
-        <p className="mt-0.5 text-[15px] leading-tight font-medium">{photo.drinkName}</p>
+        {drink ? <p className="mt-0.5 text-[15px] leading-tight font-medium">{drink}</p> : null}
+        {showCaption ? <p className="mt-1 line-clamp-3 text-xs leading-snug text-white/85">{caption}</p> : null}
       </div>
     </>
   );
@@ -84,6 +90,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const [boardRevision, setBoardRevision] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [screen, setScreen] = useState<Screen>(entryCode ? "entry" : "vote");
+  const [routeReady, setRouteReady] = useState(false);
   const [uploadBack, setUploadBack] = useState<ReturnScreen>("vote");
   const [entered, setEntered] = useState<OwnerEntry | null>(null);
   const [enteredVotes, setEnteredVotes] = useState(0);
@@ -343,7 +350,14 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     else if (params.get("picks") === "1") setScreen("picks");
     else if (params.get("mine") === "1") setScreen("mine");
     else if (params.get("faq") === "1") setScreen("faq");
+    setRouteReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!routeReady || !ready) return;
+    if (screen === "vote") trackContest("visit", "vote");
+    else if (screen === "picks") trackContest("visit", "leaderboard");
+  }, [routeReady, ready, screen]);
 
   useEffect(() => {
     if (screen !== "vote") return;

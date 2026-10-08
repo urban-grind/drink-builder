@@ -173,6 +173,14 @@ function ensurePhotoTables(db: DatabaseSync): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_coming_soon_events_kind ON coming_soon_events (kind, name);
+    CREATE TABLE IF NOT EXISTS contest_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visitor_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_contest_events_kind ON contest_events (kind, name);
   `);
   const columns = db.prepare("PRAGMA table_info(photo_entries)").all() as {
     name: string;

@@ -4,7 +4,7 @@ import { after, before, describe, it } from "node:test";
 import os from "node:os";
 import path from "node:path";
 import { getDb, resetDbForTests } from "./db";
-import { claimDrawEntrant, countDrawSwipes, drawEntrantKnown, saveDrawEntrant } from "./draw-entry";
+import { claimDrawEntrant, countDrawSwipes, drawEntrantKnown, drawEntrantProfile, saveDrawEntrant } from "./draw-entry";
 import { DRAW_ASK_EVERY, nextDrawAsk, shouldAskDraw } from "./draw-prompt";
 
 const previousDb = process.env.DRINK_DB_PATH;
@@ -81,6 +81,15 @@ describe("draw entrants", () => {
     assert.equal(row.person_name, "Elena");
     assert.equal(row.email, "elena@example.com");
     assert.equal(row.phone, null);
+    assert.deepEqual(drawEntrantProfile(voterId), { personName: "Elena", contact: "elena@example.com" });
+    assert.equal(drawEntrantProfile(randomUUID()), null);
+  });
+
+  it("returns a saved phone in the form people already type", () => {
+    const voterId = randomUUID();
+    const saved = saveDrawEntrant(voterId, { personName: "Sam", phone: "705-555-0199" });
+    assert.equal(saved.ok, true);
+    assert.deepEqual(drawEntrantProfile(voterId), { personName: "Sam", contact: "(705) 555-0199" });
   });
 
   it("rejects a missing name or contact", () => {

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
 import { useEarlyPhotoUpload } from "@/components/use-early-photo-upload";
-import { rememberMyPhoto } from "@/lib/local-votes";
+import { ensureVoterId, rememberMyPhoto } from "@/lib/local-votes";
 import { ContactField } from "@/components/contact-field";
 import {
   PHOTO_CAPTION_MAX,
@@ -30,12 +30,15 @@ import type { FieldErrors } from "@/lib/types";
 export function PhotoEntryForm({
   presentation = "page",
   active = true,
+  rememberIdentity = true,
   onFinished,
   onBack,
   onEntered,
 }: {
   presentation?: "page" | "dialog" | "shell";
   active?: boolean;
+  /** Fill the name and contact this browser already saved while swiping. */
+  rememberIdentity?: boolean;
   onFinished?: () => void;
   onBack?: () => void;
   onEntered?: (entry: OwnerEntry) => void;
@@ -55,6 +58,9 @@ export function PhotoEntryForm({
   };
   const [personName, setPersonName] = useState("");
   const [contact, setContact] = useState("");
+  const [remembered, setRemembered] = useState(false);
+  const nameEdited = useRef(false);
+  const contactEdited = useRef(false);
   const [drinkName, setDrinkName] = useState("");
   const [caption, setCaption] = useState("");
   const [agreed, setAgreed] = useState(false);
@@ -74,6 +80,28 @@ export function PhotoEntryForm({
   const [phase, setPhase] = useState<"finishing" | "saving" | null>(null);
   const upload = useEarlyPhotoUpload(active);
   const [saved, setSaved] = useState<OwnerEntry | null>(null);
+
+  useEffect(() => {
+    if (!rememberIdentity) return;
+    const controller = new AbortController();
+    requestJson<{ personName?: string; contact?: string }>("/api/photos/draw", {
+      method: "POST",
+      signal: controller.signal,
+      body: JSON.stringify({ voterId: ensureVoterId(), profile: true }),
+    })
+      .then((data) => {
+        const name = typeof data.personName === "string" ? data.personName.trim() : "";
+        const savedContact = typeof data.contact === "string" ? data.contact.trim() : "";
+        if (!name && !savedContact) return;
+        if (!nameEdited.current && name) setPersonName(name);
+        if (!contactEdited.current && savedContact) setContact(savedContact);
+        setRemembered(true);
+      })
+      .catch((caught: unknown) => {
+        if (caught instanceof Error && caught.name === "AbortError") return;
+      });
+    return () => controller.abort();
+  }, [rememberIdentity]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,7 +185,13 @@ export function PhotoEntryForm({
     void upload.start(next);
   }
 
+  function onName(value: string) {
+    nameEdited.current = true;
+    setPersonName(value);
+  }
+
   function onContact(value: string) {
+    contactEdited.current = true;
     setContact(value);
     setFields((current) => {
       if (!current.contact) return current;
@@ -418,7 +452,8 @@ export function PhotoEntryForm({
             className="h-12 w-full rounded-full bg-[#274b3a] px-6 text-base font-semibold text-[#f3f2ef]"
             onClick={() => {
               setEntryStep("details");
-              window.setTimeout(() => document.getElementById(fieldIds.personName)?.focus(), 0);
+              const nextFocus = personName.trim() && contact.trim() ? fieldIds.drinkName : fieldIds.personName;
+              window.setTimeout(() => document.getElementById(nextFocus)?.focus(), 0);
             }}
           >
             Next
@@ -433,14 +468,18 @@ export function PhotoEntryForm({
 
         {entryStep === "details" ? (
         <>
-        <p className="text-center text-sm text-[#274b3a]/75">Add your name. Saving it signs you up so Urban Grind can contact you.</p>
+        <p className="text-center text-sm text-[#274b3a]/75">
+          {remembered && personName.trim() && contact.trim()
+            ? "We filled in the name and contact you saved."
+            : "Add your name. Saving it signs you up so Urban Grind can contact you."}
+        </p>
         <div className="grid gap-1.5">
           <Label htmlFor={fieldIds.personName}>Your name</Label>
           <Input
             id={fieldIds.personName}
             name="personName"
             value={personName}
-            onChange={(event) => setPersonName(event.target.value)}
+            onChange={(event) => onName(event.target.value)}
             maxLength={PHOTO_NAME_MAX}
             autoComplete="name"
             aria-invalid={Boolean(fields.personName)}
@@ -572,13 +611,17 @@ export function PhotoEntryForm({
           ) : null}
         </div>
 
+        {remembered && personName.trim() && contact.trim() ? (
+          <p className="text-sm text-[#274b3a]/75">We filled in the name and contact you saved.</p>
+        ) : null}
+
         <div className="grid gap-2">
           <Label htmlFor={fieldIds.personName}>Your name</Label>
           <Input
             id={fieldIds.personName}
             name="personName"
             value={personName}
-            onChange={(event) => setPersonName(event.target.value)}
+            onChange={(event) => onName(event.target.value)}
             maxLength={PHOTO_NAME_MAX}
             autoComplete="name"
             aria-invalid={Boolean(fields.personName)}

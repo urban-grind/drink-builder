@@ -8,6 +8,7 @@ import { VoteCountedDialog } from "@/components/vote-counted-dialog";
 import { useVoter } from "@/components/use-voter";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
+import { trackContest } from "@/lib/contest-track";
 import { firstName, photoEntryPath } from "@/lib/first-name";
 import type { PublicPhoto } from "@/lib/photo-types";
 
@@ -58,6 +59,11 @@ export function PhotoDetail({
       document.title = "Urban Grind Photo Content";
     };
   }, [code, ready, voterId, reloadKey]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    trackContest("visit", "photo");
+  }, [status, code]);
 
   function show(next: PublicPhoto) {
     setPhoto(next);

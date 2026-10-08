@@ -17,7 +17,7 @@ export function comingSoonAllowsAsset(pathname: string): boolean {
   if (pathname === "/favicon.ico" || pathname === "/urban-grind-logo.png") return true;
   if (pathname === "/icon" || pathname === "/icon.png" || pathname.startsWith("/apple-icon")) return true;
   if (pathname.startsWith("/coming-soon/")) return true;
-  if (pathname === "/api/coming-soon/hit") return true;
+  if (pathname === "/api/coming-soon/hit" || pathname === "/api/contest/hit") return true;
   if (pathname.startsWith("/_next/static/") || pathname.startsWith("/_next/webpack-hmr")) return true;
   return false;
 }

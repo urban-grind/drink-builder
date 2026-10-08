@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { InstagramSize } from "@/lib/instagram-png";
 import { savePhotoInstagramPng } from "@/lib/photo-instagram-png";
 import { phoneSharesPng } from "@/lib/share-png";
+import { trackContest } from "@/lib/contest-track";
 import { firstName } from "@/lib/first-name";
 import { photoShareCard } from "@/lib/photo-share-text";
 import { ownerPlaceLine, ownerStandingBanner } from "@/lib/photo-standing";
@@ -115,6 +116,7 @@ export function PhotoEntryView({
   }
 
   async function shareLink() {
+    trackContest("click", "share-link");
     const card = photoShareCard(personName);
     if (typeof navigator.share === "function") {
       try {
@@ -130,6 +132,7 @@ export function PhotoEntryView({
 
   async function save(size: InstagramSize) {
     if (download) return;
+    trackContest("click", size === "story" ? "download-story" : "download-post");
     const share = phoneSharesPng();
     setDownload(size);
     setSharing(share);
