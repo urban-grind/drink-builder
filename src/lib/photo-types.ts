@@ -19,8 +19,8 @@ export type OwnedPhoto = PublicPhoto & {
   status: "pending" | "approved";
   /** Place on the public board. Pending photos are not ranked. */
   rank: number | null;
-  /** Votes still needed to reach second place. Null when that gap is not a useful number. */
-  votesFromTopTwo: number | null;
+  /** Votes still needed to catch first place. Null when that gap is not a useful number. */
+  votesFromFirst: number | null;
 };
 
 export type ReviewPhoto = PublicPhoto & {

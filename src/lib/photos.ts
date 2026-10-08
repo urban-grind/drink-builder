@@ -157,14 +157,14 @@ export function likeRate(voteCount: number, skipCount: number): number | null {
   return voteCount / seen;
 }
 
-/** Rank and the vote gap to second place. A tie on votes has no useful gap. */
-export function standingsFor(ordered: { id: string; voteCount: number }[]): Map<string, { rank: number; votesFromTopTwo: number | null }> {
-  const secondVotes = ordered.length >= 2 ? ordered[1].voteCount : 0;
-  const standings = new Map<string, { rank: number; votesFromTopTwo: number | null }>();
+/** Rank and the vote gap to first place. A tie on votes has no useful gap. */
+export function standingsFor(ordered: { id: string; voteCount: number }[]): Map<string, { rank: number; votesFromFirst: number | null }> {
+  const firstVotes = ordered[0]?.voteCount ?? 0;
+  const standings = new Map<string, { rank: number; votesFromFirst: number | null }>();
   ordered.forEach((photo, index) => {
     const rank = index + 1;
-    const votesFromTopTwo = rank > 2 && secondVotes > photo.voteCount ? secondVotes - photo.voteCount : null;
-    standings.set(photo.id, { rank, votesFromTopTwo });
+    const votesFromFirst = rank > 1 && firstVotes > photo.voteCount ? firstVotes - photo.voteCount : null;
+    standings.set(photo.id, { rank, votesFromFirst });
   });
   return standings;
 }
@@ -181,10 +181,13 @@ export function compareLeaderboard(
 /** How many top photos one request returns when the caller does not ask for a page. */
 export const LEADERBOARD_LIMIT = 20;
 
+/** How many photos the public leaderboard shows. */
+export const LEADERBOARD_SIZE = 25;
+
 /** How many leaderboard photos the phone asks for as the list scrolls. */
 export const LEADERBOARD_PAGE_SIZE = 4;
 
-const LEADERBOARD_MAX_PAGE = 24;
+const LEADERBOARD_MAX_PAGE = LEADERBOARD_SIZE;
 
 /** How many cards a phone asks for at once. */
 export const DECK_PAGE_SIZE = 5;
@@ -203,8 +206,10 @@ export function listPhotoLeaderboard(options?: { offset?: number; limit?: number
   hasMore: boolean;
 } {
   ensureSamplePhotos();
-  const limit = pageBound(options?.limit, LEADERBOARD_LIMIT, LEADERBOARD_MAX_PAGE);
-  const offset = pageBound(options?.offset, 0, 10_000);
+  const offset = pageBound(options?.offset, 0, LEADERBOARD_SIZE);
+  const room = LEADERBOARD_SIZE - offset;
+  if (room <= 0) return { photos: [], hasMore: false };
+  const limit = Math.min(pageBound(options?.limit, LEADERBOARD_LIMIT, LEADERBOARD_MAX_PAGE), room);
   const rows = getDb()
     .prepare(
       `SELECT
@@ -237,7 +242,7 @@ export function listPhotoLeaderboard(options?: { offset?: number; limit?: number
     vote_count: number;
     skip_count: number;
   }[];
-  const hasMore = rows.length > limit;
+  const hasMore = rows.length > limit && offset + Math.min(rows.length, limit) < LEADERBOARD_SIZE;
   const photos = rows.slice(0, limit).map((row) => {
     const voteCount = Number(row.vote_count);
     const skipCount = Number(row.skip_count);
@@ -561,7 +566,7 @@ export function checkPhotoContact(input: {
 
 const OWNED_PHOTO_LIMIT = 40;
 
-function boardStandings(): Map<string, { rank: number; votesFromTopTwo: number | null }> {
+function boardStandings(): Map<string, { rank: number; votesFromFirst: number | null }> {
   ensureSamplePhotos();
   const rows = getDb()
     .prepare(
@@ -586,13 +591,13 @@ function boardStandings(): Map<string, { rank: number; votesFromTopTwo: number |
   return standingsFor(rows.map((row) => ({ id: row.id, voteCount: Number(row.vote_count) })));
 }
 
-function toOwned(row: EntryRow, standings: Map<string, { rank: number; votesFromTopTwo: number | null }>): OwnedPhoto {
+function toOwned(row: EntryRow, standings: Map<string, { rank: number; votesFromFirst: number | null }>): OwnedPhoto {
   const standing = row.status === "approved" ? standings.get(row.id) : undefined;
   return {
     ...toPublic(row),
     status: row.status === "approved" ? "approved" : "pending",
     rank: standing?.rank ?? null,
-    votesFromTopTwo: standing?.votesFromTopTwo ?? null,
+    votesFromFirst: standing?.votesFromFirst ?? null,
   };
 }
 

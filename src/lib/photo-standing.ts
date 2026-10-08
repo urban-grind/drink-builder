@@ -12,14 +12,14 @@ export function ownerStandingBanner(input: {
   live: boolean;
   voteCount: number;
   rank: number | null;
-  votesFromTopTwo: number | null;
+  votesFromFirst: number | null;
 }): string {
   if (!input.live) return "Waiting for approval. You can still share your link.";
   if (input.voteCount === 0 || input.rank == null) return "This is your personalized voting link.";
-  if (input.rank <= 2) return "In the top two";
-  if (input.votesFromTopTwo != null) {
-    const gap = input.votesFromTopTwo;
-    return `${gap} ${gap === 1 ? "vote" : "votes"} from the top two`;
+  if (input.rank === 1) return "In first place";
+  if (input.votesFromFirst != null) {
+    const gap = input.votesFromFirst;
+    return `${gap} ${gap === 1 ? "vote" : "votes"} from the top place`;
   }
   return ordinal(input.rank);
 }
@@ -31,20 +31,20 @@ export function ownerPlaceLine(input: { live: boolean; voteCount: number; rank: 
   return `${votes} · ${ordinal(input.rank)}`;
 }
 
-/** Votes, place, and the gap to the top two. A new entry has no rank yet. */
+/** Votes, place, and the gap to first place. A new entry has no rank yet. */
 export function ownerStandingLine(input: {
   live: boolean;
   voteCount: number;
   rank: number | null;
-  votesFromTopTwo: number | null;
+  votesFromFirst: number | null;
 }): string {
   if (!input.live) return "Waiting for approval. You can still share your link.";
   const votes = `${input.voteCount} ${input.voteCount === 1 ? "vote" : "votes"}`;
   if (input.voteCount === 0 || input.rank == null) return "Share your link to get your first vote.";
   const place = ordinal(input.rank);
-  if (input.rank <= 2) return `${votes} · ${place} · In the top two`;
-  if (input.votesFromTopTwo != null) {
-    const gap = `${input.votesFromTopTwo} ${input.votesFromTopTwo === 1 ? "vote" : "votes"} from the top two`;
+  if (input.rank === 1) return `${votes} · ${place} · In first place`;
+  if (input.votesFromFirst != null) {
+    const gap = `${input.votesFromFirst} ${input.votesFromFirst === 1 ? "vote" : "votes"} from the top place`;
     return `${votes} · ${place} · ${gap}`;
   }
   return `${votes} · ${place}`;

@@ -126,7 +126,7 @@ export function MyPhotos({
                       live: photo.status === "approved",
                       voteCount: photo.voteCount,
                       rank: photo.rank,
-                      votesFromTopTwo: photo.votesFromTopTwo,
+                      votesFromFirst: photo.votesFromFirst,
                     })}
                   </span>
                 </span>

@@ -757,7 +757,7 @@ describe("photo contest", { concurrency: false }, () => {
     }
   });
 
-  it("measures how far a photo is from the top two", () => {
+  it("measures how far a photo is from first place", () => {
     const standings = standingsFor([
       { id: "first", voteCount: 10 },
       { id: "second", voteCount: 7 },
@@ -765,11 +765,11 @@ describe("photo contest", { concurrency: false }, () => {
       { id: "tied", voteCount: 7 },
     ]);
     assert.equal(standings.get("first")?.rank, 1);
-    assert.equal(standings.get("first")?.votesFromTopTwo, null);
-    assert.equal(standings.get("second")?.votesFromTopTwo, null);
-    assert.equal(standings.get("close")?.votesFromTopTwo, 3);
+    assert.equal(standings.get("first")?.votesFromFirst, null);
+    assert.equal(standings.get("second")?.votesFromFirst, 3);
+    assert.equal(standings.get("close")?.votesFromFirst, 6);
     assert.equal(standings.get("tied")?.rank, 4);
-    assert.equal(standings.get("tied")?.votesFromTopTwo, null);
+    assert.equal(standings.get("tied")?.votesFromFirst, 3);
   });
 
   it("ranks the leaderboard by votes, then like percentage, and keeps skips on the server", () => {
@@ -788,6 +788,12 @@ describe("photo contest", { concurrency: false }, () => {
       const secondPage = listPhotoLeaderboard({ offset: 4, limit: 4 });
       assert.equal(firstPage.photos.length, 4);
       assert.equal(firstPage.hasMore, ranked.photos.length > 4);
+      const board = listPhotoLeaderboard({ offset: 0, limit: 25 });
+      assert.ok(board.photos.length <= 25);
+      assert.equal(board.hasMore, false);
+      const past = listPhotoLeaderboard({ offset: 25, limit: 4 });
+      assert.equal(past.photos.length, 0);
+      assert.equal(past.hasMore, false);
       assert.deepEqual(
         [...firstPage.photos, ...secondPage.photos].map((photo) => photo.id),
         ranked.photos.slice(0, 8).map((photo) => photo.id),

@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { jsonError, jsonOk } from "@/lib/api";
-import { contestActivity, LEADERBOARD_PAGE_SIZE, listPhotoLeaderboard } from "@/lib/photos";
+import { contestActivity, LEADERBOARD_PAGE_SIZE, LEADERBOARD_SIZE, listPhotoLeaderboard } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     return jsonOk({
       ...listPhotoLeaderboard({
         offset: pageNumber(url.searchParams.get("offset"), 0, 10_000),
-        limit: pageNumber(url.searchParams.get("limit"), LEADERBOARD_PAGE_SIZE, 24),
+        limit: pageNumber(url.searchParams.get("limit"), LEADERBOARD_PAGE_SIZE, LEADERBOARD_SIZE),
       }),
       activity: contestActivity(),
     });

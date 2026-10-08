@@ -749,7 +749,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               });
               setEnteredVotes(photo.voteCount);
               setEnteredRank(photo.rank);
-              setEnteredGap(photo.votesFromTopTwo);
+              setEnteredGap(photo.votesFromFirst);
               setEnteredFrom("mine");
               setScreen("entered");
             }}
@@ -819,7 +819,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             photoUrl={entered.photoUrl}
             voteCount={enteredVotes}
             rank={enteredRank}
-            votesFromTopTwo={enteredGap}
+            votesFromFirst={enteredGap}
             createdAt={entered.createdAt}
             entryPath={photoEntryPath(entered.code)}
             live={entered.live}

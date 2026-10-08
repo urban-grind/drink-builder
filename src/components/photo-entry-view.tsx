@@ -31,7 +31,7 @@ export function PhotoEntryView({
   photoUrl,
   voteCount,
   rank = null,
-  votesFromTopTwo = null,
+  votesFromFirst = null,
   entryPath,
   live = true,
   voted = false,
@@ -49,7 +49,7 @@ export function PhotoEntryView({
   photoUrl: string;
   voteCount: number;
   rank?: number | null;
-  votesFromTopTwo?: number | null;
+  votesFromFirst?: number | null;
   createdAt: string;
   entryPath: string;
   live?: boolean;
@@ -164,7 +164,7 @@ export function PhotoEntryView({
         : "Waiting for approval. You can still share it."
       : `Help ${name} win free coffee for a month.`;
   const votes = `${voteCount} ${voteCount === 1 ? "vote" : "votes"}`;
-  const banner = ownerStandingBanner({ live, voteCount, rank, votesFromTopTwo });
+  const banner = ownerStandingBanner({ live, voteCount, rank, votesFromFirst });
   const place = ownerPlaceLine({ live, voteCount, rank });
   const onPhoto =
     "inline-flex min-h-11 w-full items-center justify-center rounded-full px-2 py-2 text-center text-[13px] font-semibold leading-tight shadow-[0_8px_20px_rgb(0_0_0/0.22)]";
