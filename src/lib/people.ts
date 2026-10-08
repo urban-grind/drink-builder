@@ -5,6 +5,7 @@ export type PersonRecord = {
   email: string | null;
   phone: string | null;
   photoCount: number;
+  swipeCount: number;
   inDraw: boolean;
   signedUpAt: string;
 };
@@ -16,13 +17,15 @@ type ContactRow = {
   created_at: string;
   photos: number;
   draw: number;
+  voter_id: string | null;
+  swipes: number;
 };
 
 /** Photo uploads and draw signups, one row per person. Matched on email or phone. */
 export function listPeople(): PersonRecord[] {
   const photos = getDb()
     .prepare(
-      `SELECT person_name, email, phone, created_at, 1 AS photos, 0 AS draw
+      `SELECT person_name, email, phone, created_at, 1 AS photos, 0 AS draw, NULL AS voter_id, 0 AS swipes
        FROM photo_entries
        WHERE original_key NOT LIKE 'local-sample/%'
          AND (
@@ -33,7 +36,8 @@ export function listPeople(): PersonRecord[] {
     .all() as ContactRow[];
   const draws = getDb()
     .prepare(
-      `SELECT person_name, email, phone, created_at, 0 AS photos, 1 AS draw
+      `SELECT person_name, email, phone, created_at, 0 AS photos, 1 AS draw, voter_id,
+              (SELECT COUNT(*) FROM photo_swipes s WHERE s.voter_id = draw_entrants.voter_id) AS swipes
        FROM draw_entrants`,
     )
     .all() as ContactRow[];
@@ -94,9 +98,21 @@ function toPerson(rows: ContactRow[]): PersonRecord {
     email,
     phone,
     photoCount: ordered.reduce((sum, row) => sum + Number(row.photos), 0),
+    swipeCount: swipeTotal(ordered),
     inDraw: ordered.some((row) => Number(row.draw) === 1),
     signedUpAt: ordered[0].created_at,
   };
+}
+
+function swipeTotal(rows: ContactRow[]): number {
+  const seen = new Set<string>();
+  let total = 0;
+  for (const row of rows) {
+    if (!row.voter_id || seen.has(row.voter_id)) continue;
+    seen.add(row.voter_id);
+    total += Number(row.swipes);
+  }
+  return total;
 }
 
 function clean(value: string | null): string | null {

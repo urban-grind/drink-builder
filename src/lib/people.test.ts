@@ -26,6 +26,13 @@ function insertPhoto(input: { name: string; email?: string | null; phone?: strin
       input.at,
       id.replaceAll("-", "").slice(0, 12),
     );
+  return id;
+}
+
+function insertSwipe(voterId: string, photoId: string) {
+  getDb()
+    .prepare("INSERT INTO photo_swipes (voter_id, photo_id, action, created_at) VALUES (?, ?, 'skip', ?)")
+    .run(voterId, photoId, "2026-10-08T12:00:00.000Z");
 }
 
 describe("people list", () => {
@@ -40,16 +47,24 @@ describe("people list", () => {
   });
 
   it("joins a photo and a draw signup that share an email, and keeps a phone signup separate", () => {
-    insertPhoto({ name: "Elena", email: "elena@example.com", at: "2026-10-07T15:00:00.000Z" });
-    insertPhoto({ name: "Elena V.", email: "elena@example.com", at: "2026-10-08T15:00:00.000Z" });
+    const firstPhoto = insertPhoto({ name: "Elena", email: "elena@example.com", at: "2026-10-07T15:00:00.000Z" });
+    const secondPhoto = insertPhoto({ name: "Elena V.", email: "elena@example.com", at: "2026-10-08T15:00:00.000Z" });
     insertPhoto({ name: "Sample", email: "sample@preview.invalid", at: "2026-10-01T15:00:00.000Z", sample: true });
     const voterId = randomUUID();
+    const otherPhone = randomUUID();
     getDb()
       .prepare("INSERT INTO draw_entrants (voter_id, person_name, email, phone, created_at) VALUES (?, ?, ?, ?, ?)")
       .run(voterId, "Elena M.", "elena@example.com", null, "2026-10-09T15:00:00.000Z");
     getDb()
       .prepare("INSERT INTO draw_entrants (voter_id, person_name, email, phone, created_at) VALUES (?, ?, ?, ?, ?)")
-      .run(randomUUID(), "Jonah", null, "7055550199", "2026-10-06T15:00:00.000Z");
+      .run(otherPhone, "Elena M.", "elena@example.com", null, "2026-10-09T16:00:00.000Z");
+    const jonahId = randomUUID();
+    getDb()
+      .prepare("INSERT INTO draw_entrants (voter_id, person_name, email, phone, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(jonahId, "Jonah", null, "7055550199", "2026-10-06T15:00:00.000Z");
+    insertSwipe(voterId, firstPhoto);
+    insertSwipe(voterId, secondPhoto);
+    insertSwipe(otherPhone, firstPhoto);
 
     const people = listPeople();
     assert.equal(people.length, 2);
@@ -58,6 +73,7 @@ describe("people list", () => {
       email: "elena@example.com",
       phone: null,
       photoCount: 2,
+      swipeCount: 3,
       inDraw: true,
       signedUpAt: "2026-10-07T15:00:00.000Z",
     });
@@ -66,6 +82,7 @@ describe("people list", () => {
       email: null,
       phone: "7055550199",
       photoCount: 0,
+      swipeCount: 0,
       inDraw: true,
       signedUpAt: "2026-10-06T15:00:00.000Z",
     });

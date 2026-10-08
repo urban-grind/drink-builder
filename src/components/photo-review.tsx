@@ -357,13 +357,17 @@ function PeopleList({ people }: { people: PersonRecord[] }) {
             {person.email ? <p className="mt-1 text-sm">{person.email}</p> : null}
             {person.phone ? <p className="mt-1 text-sm">{formatStoredPhone(person.phone)}</p> : null}
             <p className="mt-2 text-sm text-[#274b3a]/70">
-              {signupLabel(person)} · {signedUpLabel(person.signedUpAt)}
+              {signupLabel(person)} · {swipeLabel(person.swipeCount)} · {signedUpLabel(person.signedUpAt)}
             </p>
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+function swipeLabel(count: number): string {
+  return count === 1 ? "1 swipe" : `${count} swipes`;
 }
 
 function signupLabel(person: PersonRecord): string {
@@ -382,13 +386,14 @@ function signedUpLabel(iso: string): string {
 
 function downloadPeople(people: PersonRecord[]) {
   const lines = [
-    ["Name", "Email", "Phone", "Photos", "Draw", "Signed up"],
+    ["Name", "Email", "Phone", "Photos", "Draw", "Swipes", "Signed up"],
     ...people.map((person) => [
       person.name,
       person.email ?? "",
       person.phone ? formatStoredPhone(person.phone) : "",
       String(person.photoCount),
       person.inDraw ? "Yes" : "No",
+      String(person.swipeCount),
       person.signedUpAt,
     ]),
   ];

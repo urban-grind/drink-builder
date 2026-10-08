@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { getDb, resetDbForTests } from "./db";
 import { claimDrawEntrant, countDrawSwipes, drawEntrantKnown, drawEntrantProfile, saveDrawEntrant } from "./draw-entry";
-import { DRAW_ASK_EVERY, nextDrawAsk, shouldAskDraw } from "./draw-prompt";
+import { DRAW_ASK_EVERY, DRAW_REQUIRED_AT, drawPromptMode, nextDrawAsk, shouldAskDraw, swipeNeedsSignup } from "./draw-prompt";
+import { swipeDeckPhoto } from "./photos";
 
 const previousDb = process.env.DRINK_DB_PATH;
 process.env.DRINK_DB_PATH = path.join(os.tmpdir(), `urban-grind-draw-${process.pid}.sqlite`);
@@ -45,13 +46,17 @@ function insertSwipe(voterId: string, photoId: string) {
 }
 
 describe("draw prompt", () => {
-  it("asks on the fifth swipe, then five later if they close it", () => {
+  it("asks on the fifth swipe, then requires a signup five later", () => {
     assert.equal(shouldAskDraw(4, false, DRAW_ASK_EVERY), false);
-    assert.equal(shouldAskDraw(5, false, DRAW_ASK_EVERY), true);
-    assert.equal(shouldAskDraw(5, true, DRAW_ASK_EVERY), false);
+    assert.equal(drawPromptMode(5, false, DRAW_ASK_EVERY), "ask");
+    assert.equal(drawPromptMode(5, true, DRAW_ASK_EVERY), "closed");
     assert.equal(nextDrawAsk(5), 10);
-    assert.equal(shouldAskDraw(9, false, 10), false);
-    assert.equal(shouldAskDraw(10, false, 10), true);
+    assert.equal(drawPromptMode(9, false, 10), "closed");
+    assert.equal(drawPromptMode(10, false, 10), "required");
+    assert.equal(drawPromptMode(12, true, 10), "closed");
+    assert.equal(swipeNeedsSignup(DRAW_REQUIRED_AT - 1, false), false);
+    assert.equal(swipeNeedsSignup(DRAW_REQUIRED_AT, false), true);
+    assert.equal(swipeNeedsSignup(DRAW_REQUIRED_AT, true), false);
   });
 });
 
@@ -139,5 +144,20 @@ describe("draw entrants", () => {
     getDb().prepare("DELETE FROM photo_swipes WHERE voter_id = ? AND photo_id = ?").run(voterId, photoId);
     assert.equal(countDrawSwipes(voterId), 0);
     assert.equal(claimDrawEntrant(voterId, []), false);
+  });
+
+  it("stops the next swipe after ten until they sign up", () => {
+    const voterId = randomUUID();
+    for (let index = 0; index < DRAW_REQUIRED_AT; index += 1) insertSwipe(voterId, insertEntry({}));
+    const blockedId = insertEntry({});
+    const blocked = swipeDeckPhoto(blockedId, voterId, "skip");
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.equal(blocked.code, "SIGNUP_REQUIRED");
+    assert.equal(countDrawSwipes(voterId), DRAW_REQUIRED_AT);
+    const saved = saveDrawEntrant(voterId, { personName: "Elena", email: "elena@example.com", phone: "" });
+    assert.equal(saved.ok, true);
+    const allowed = swipeDeckPhoto(blockedId, voterId, "skip");
+    assert.equal(allowed.ok, true);
+    assert.equal(countDrawSwipes(voterId), DRAW_REQUIRED_AT + 1);
   });
 });

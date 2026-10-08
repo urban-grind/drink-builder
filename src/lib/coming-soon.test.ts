@@ -85,6 +85,8 @@ describe("coming soon gate", () => {
 
   it("renders a page with the countdown and none of the contest", () => {
     const html = comingSoonHtml(COMING_SOON_AT - 5000);
+    assert.match(html, /href="https:\/\/urbangrind\.ca"/);
+    assert.match(html, /Need a pick me up\?/);
     assert.match(html, /Sip\. Snap\. Swipe\./);
     assert.match(html, /Win free coffee<br>for a month\./);
     assert.match(html, /Four ways to win\./);

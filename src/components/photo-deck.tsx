@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
+import { CafeLink } from "@/components/cafe-link";
 import { DrawEntryDialog } from "@/components/draw-entry-dialog";
 import { MyPhotos } from "@/components/my-photos";
 import { PhotoDetail } from "@/components/photo-detail";
@@ -115,9 +116,10 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   const arrowSwipe = useRef<number | null>(null);
   const finishRef = useRef<(action: "vote" | "skip") => void>(() => {});
   const canDragRef = useRef(false);
+  const swipeLockedRef = useRef(false);
   const setDragRef = useRef<(value: number) => void>(() => {});
   const stopDemoRef = useSwipeDemo(
-    screen === "vote" && status === "ready" && photos.length > 0 && !draw.open && !waysOpen,
+    screen === "vote" && status === "ready" && photos.length > 0 && !draw.open && !draw.required && !waysOpen,
     cardRef,
     (value) => setDragRef.current(value),
     setFlight,
@@ -212,6 +214,13 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
 
   async function finish(action: "vote" | "skip") {
     stopDemoRef.current();
+    if (swipeLockedRef.current) {
+      startX.current = null;
+      setFlight("back");
+      setDrag(0);
+      draw.reopen();
+      return;
+    }
     if (!voterId || !current || busy) return;
     const photo = current;
     setBusy(true);
@@ -244,7 +253,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   }
 
   async function undo() {
-    if (!voterId || !last || busy) return;
+    if (swipeLockedRef.current || !voterId || !last || busy) return;
     const previous = last;
     setBusy(true);
     setError("");
@@ -273,6 +282,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
   }
 
   finishRef.current = finish;
+  swipeLockedRef.current = draw.required;
   canDragRef.current = Boolean(current) && !busy;
 
   useEffect(() => {
@@ -378,8 +388,14 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [screen]);
 
-  function scrollToSwipe() {
-    document.getElementById("swipe")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  function scrollToSwipe(behavior: ScrollBehavior = "smooth") {
+    const node = document.getElementById("swipe");
+    if (!node) return;
+    const header = document.querySelector("header");
+    const offset = Math.ceil(header?.getBoundingClientRect().height ?? 96) + 12;
+    const top = node.getBoundingClientRect().top + window.scrollY - offset;
+    const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    window.scrollTo({ top: Math.min(Math.max(0, top), max), behavior });
   }
 
   function scrollToIntro() {
@@ -392,7 +408,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       return;
     }
     if (tab === "vote") {
-      if (window.location.search) router.replace("/");
+      if (window.location.search) router.replace("/", { scroll: false });
       setScreen("vote");
       if (toSwipe) {
         if (screen === "vote") scrollToSwipe();
@@ -411,19 +427,43 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
     if (screen !== "vote") return;
     const fromHash = window.location.hash === "#swipe";
     if (!pendingSwipeScroll.current && !fromHash) return;
-    pendingSwipeScroll.current = false;
-    scrollToSwipe();
-    if (fromHash) history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    let cancelled = false;
+    const started = performance.now();
+    // Changing tabs scrolls the page on its own, sometimes after the cards are already in place.
+    // Keep putting the cards under the header until that settles.
+    const frame = window.setInterval(() => {
+      if (cancelled) return;
+      if (performance.now() - started > 2500) {
+        window.clearInterval(frame);
+        pendingSwipeScroll.current = false;
+        if (fromHash) history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        return;
+      }
+      if (window.location.search) return;
+      const node = document.getElementById("swipe");
+      const header = document.querySelector("header");
+      const headerHeight = header?.getBoundingClientRect().height ?? 96;
+      const gap = node ? node.getBoundingClientRect().top - headerHeight : 999;
+      if (Math.abs(gap - 12) > 24) scrollToSwipe("auto");
+      else pendingSwipeScroll.current = false;
+    }, 80);
+    return () => {
+      cancelled = true;
+      window.clearInterval(frame);
+    };
   }, [screen]);
 
   return (
     <div className={`relative flex w-full flex-col ${screen === "vote" || screen === "picks" || screen === "entry" || screen === "entered" ? "min-h-dvh" : "h-dvh"}`}>
       <header className="sticky top-0 z-30 shrink-0 border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-[26rem] items-center justify-between gap-4 px-5 pt-4 pb-3.5 md:max-w-7xl md:px-10 md:pt-6">
-        <button type="button" onClick={() => goTab("vote")} className="shrink-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/urban-grind-logo.png" alt="Urban Grind Coffee Co." className="h-11 w-auto" />
-        </button>
+        <div className="flex min-w-0 flex-col items-start gap-1.5 md:flex-row md:items-center md:gap-4">
+          <button type="button" onClick={() => goTab("vote")} className="shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/urban-grind-logo.png" alt="Urban Grind Coffee Co." className="h-11 w-auto" />
+          </button>
+          <CafeLink />
+        </div>
         {screen === "upload" ? (
           <button
             type="button"
@@ -523,7 +563,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             </div>
           </section>
 
-          <div id="swipe" className="flex scroll-mt-24 flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:justify-center md:pb-20">
+          <div id="swipe" className="flex min-h-[calc(100dvh-6rem)] flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-5.5rem)] md:justify-center md:pb-20">
           <button
             type="button"
             aria-label="Back to the top"
@@ -685,7 +725,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
           <button
             type="button"
             onClick={() => void undo()}
-            disabled={!last || busy}
+            disabled={!last || busy || draw.required}
             className="mx-auto inline-flex items-center gap-1.5 py-1 text-[13px] font-medium text-[#274b3a]/45 disabled:opacity-35"
           >
             <UndoArrow />
@@ -827,7 +867,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
       ) : null}
 
       {voterId ? (
-        <DrawEntryDialog open={draw.open} voterId={voterId} onDismiss={draw.dismiss} onSaved={draw.saved} />
+        <DrawEntryDialog open={draw.open} required={draw.required} voterId={voterId} onDismiss={draw.dismiss} onSaved={draw.saved} />
       ) : null}
       <WaysToWinDialog open={waysOpen} onClose={() => setWaysOpen(false)} />
     </div>

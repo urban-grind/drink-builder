@@ -1,4 +1,5 @@
 import { beginImmediate, getDb, isUniqueConstraint, rollbackQuietly } from "@/lib/db";
+import { DRAW_REQUIRED_AT } from "@/lib/draw-prompt";
 import type { PhotoCrop } from "@/lib/photo-crop";
 import { discardUpload, prepareUpload, saveUploadCrop, UPLOAD_TTL_MS, voteKeyForUpload, thumbKeyForUpload } from "@/lib/photo-prepare";
 import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
@@ -337,7 +338,7 @@ export function swipeDeckPhoto(
   photoId: string,
   voterId: string,
   action: "vote" | "skip",
-): { ok: true; photo: PublicPhoto } | { ok: false; code: "NOT_FOUND" | "ALREADY_ACTED" } {
+): { ok: true; photo: PublicPhoto } | { ok: false; code: "NOT_FOUND" | "ALREADY_ACTED" | "SIGNUP_REQUIRED" } {
   const db = beginImmediate();
   try {
     const photo = db
@@ -346,6 +347,17 @@ export function swipeDeckPhoto(
     if (!photo) {
       db.exec("ROLLBACK");
       return { ok: false, code: "NOT_FOUND" };
+    }
+    const gate = db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM photo_swipes WHERE voter_id = ?) AS swipes,
+           (SELECT COUNT(*) FROM draw_entrants WHERE voter_id = ?) AS known`,
+      )
+      .get(voterId, voterId) as { swipes: number; known: number };
+    if (Number(gate.swipes) >= DRAW_REQUIRED_AT && Number(gate.known) === 0) {
+      db.exec("ROLLBACK");
+      return { ok: false, code: "SIGNUP_REQUIRED" };
     }
     const acted = db
       .prepare(

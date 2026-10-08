@@ -70,6 +70,9 @@ export async function POST(request: Request) {
   try {
     const result = swipeDeckPhoto(record.photoId, voter.voterId, record.action);
     if (!result.ok) {
+      if (result.code === "SIGNUP_REQUIRED") {
+        return jsonError(403, result.code, "Sign up to keep swiping.");
+      }
       const status = result.code === "NOT_FOUND" ? 404 : 409;
       const message = result.code === "NOT_FOUND" ? "That photo isn't here." : "You already passed on this photo.";
       return jsonError(status, result.code, message);

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { requestJson } from "@/lib/client-api";
-import { shouldAskDraw } from "@/lib/draw-prompt";
+import { DRAW_REQUIRED_AT, drawPromptMode } from "@/lib/draw-prompt";
 import { dismissDrawAsk, readDrawAskAfter } from "@/lib/local-votes";
 
 export function useDrawPrompt(input: {
@@ -41,17 +41,28 @@ export function useDrawPrompt(input: {
     return () => controller.abort();
   }, [ready, voterId, photoKey]);
 
+  const required = !known && swipes >= DRAW_REQUIRED_AT;
+  const held = useRef(false);
+
   useEffect(() => {
-    if (known) {
+    if (known || !asking) {
       setOpen(false);
       return;
     }
-    if (asking && shouldAskDraw(swipes, known, readDrawAskAfter())) setOpen(true);
+    const mode = drawPromptMode(swipes, known, readDrawAskAfter());
+    if (mode === "ask") setOpen(true);
+    else if (mode === "required" && !held.current) setOpen(true);
   }, [asking, known, swipes]);
 
   function dismiss() {
-    dismissDrawAsk(swipes);
+    if (required) held.current = true;
+    else dismissDrawAsk(swipes);
     setOpen(false);
+  }
+
+  function reopen() {
+    if (!required) return;
+    setOpen(true);
   }
 
   function saved() {
@@ -59,5 +70,5 @@ export function useDrawPrompt(input: {
     setOpen(false);
   }
 
-  return { open, note, dismiss, saved };
+  return { open, required, note, dismiss, reopen, saved };
 }

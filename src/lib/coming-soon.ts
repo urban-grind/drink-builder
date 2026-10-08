@@ -115,6 +115,8 @@ html,body{margin:0;min-height:100%}
 body{background:#f7f4ec;color:#274b3a;font-family:Larsseit,"Avenir Next","Segoe UI",sans-serif;overflow-x:hidden}
 main{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:safe center;padding:1.5rem 1rem 2rem;text-align:center}
 .logo{width:min(11.5rem,58vw);height:auto}
+.cafe{display:inline-flex;align-items:center;gap:.4rem;margin-top:.85rem;padding:.38rem .7rem .38rem .5rem;border:1px solid rgb(39 75 58 / 15%);border-radius:999px;background:#fff;color:inherit;font-size:.82rem;font-weight:700;line-height:1;text-decoration:none;box-shadow:0 1px 2px rgb(39 75 58 / 8%)}
+.cafe svg{display:block;flex:none}
 .tagline{margin:1.15rem 0 0;font-size:.72rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase}
 h1{margin:.55rem 0 0;font-family:Recoleta,"Iowan Old Style",Palatino,Georgia,serif;font-size:clamp(2.35rem,6.4vw,3.7rem);font-weight:600;line-height:.98;letter-spacing:-.01em}
 .stage{display:flex;align-items:center;justify-content:center;gap:.7rem;width:min(46rem,100%);margin-top:1.05rem}
@@ -162,6 +164,7 @@ h1{margin:.55rem 0 0;font-family:Recoleta,"Iowan Old Style",Palatino,Georgia,ser
 <body>
 <main>
 <img class="logo" src="/urban-grind-logo.png" alt="Urban Grind Coffee Co.">
+<a class="cafe" href="https://urbangrind.ca"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9.2 5.5V3.6c0-1.25 1.25-2.2 2.8-2.2s2.8.95 2.8 2.2v1.9z"/><path fill="currentColor" fill-rule="evenodd" d="M2.2 5.1h19.6a1.45 1.45 0 0 1 0 2.9H2.2a1.45 1.45 0 0 1 0-2.9zM10.7 5.7h2.6v1.5h-2.6z"/><path fill="currentColor" fill-rule="evenodd" d="M4.3 8.3h15.4l-1.45 12a1.45 1.45 0 0 1-1.43 1.28H7.18a1.45 1.45 0 0 1-1.43-1.28zm.9 3.9h13.5l-.28 2.7H5.48z"/></svg>Need a pick me up?</a>
 <p class="tagline">Sip. Snap. Swipe.</p>
 <h1>Win free coffee<br>for a month.</h1>
 <div class="stage">

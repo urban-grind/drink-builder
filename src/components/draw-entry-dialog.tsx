@@ -10,11 +10,13 @@ import type { FieldErrors } from "@/lib/types";
 
 export function DrawEntryDialog({
   open,
+  required = false,
   voterId,
   onDismiss,
   onSaved,
 }: {
   open: boolean;
+  required?: boolean;
   voterId: string;
   onDismiss: () => void;
   onSaved: () => void;
@@ -90,38 +92,17 @@ export function DrawEntryDialog({
     }
   }
 
-  return (
-    <dialog
-      ref={dialogRef}
-      aria-labelledby="draw-entry-title"
-      className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-[#274b3a]/45"
-      onClose={() => {
-        if (closedBy.current === "saved") {
-          closedBy.current = "dismiss";
-          return;
-        }
-        onDismiss();
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) dismiss();
-      }}
-    >
-      <div
-        className="flex h-full items-end justify-center sm:items-center sm:p-6"
-        onClick={(event) => {
-          if (event.target === event.currentTarget) dismiss();
-        }}
-      >
+  const sheet = (
         <form
           noValidate
           aria-busy={pending}
           onSubmit={(event) => void onSubmit(event)}
-          className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-[#f7f4ec] px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-3xl sm:p-6"
+          className="max-h-[70dvh] w-full overflow-y-auto rounded-t-3xl bg-[#f7f4ec] px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-3xl sm:p-6"
         >
           <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[#274b3a]/15 sm:hidden" />
           <div className="mb-4 flex items-start justify-between gap-3">
             <h2 id="draw-entry-title" className="text-xl font-semibold text-[#274b3a]">
-              You're in the draw
+              {required ? "Sign up to keep swiping" : "You're in the draw"}
             </h2>
             <button
               type="button"
@@ -133,7 +114,9 @@ export function DrawEntryDialog({
             </button>
           </div>
           <p className="mb-4 text-sm leading-relaxed text-[#274b3a]/80">
-            Every swipe is one entry. Add your name and an email or phone. Saving signs you up so Urban Grind can contact you.
+            {required
+              ? "Add your name and an email or phone to keep swiping. Saving signs you up so Urban Grind can contact you."
+              : "Every swipe is one entry. Add your name and an email or phone. Saving signs you up so Urban Grind can contact you."}
           </p>
           <div className="grid gap-3">
             <div className="grid gap-1.5">
@@ -181,6 +164,7 @@ export function DrawEntryDialog({
           >
             {pending ? "Saving…" : "Save my entries"}
           </button>
+          {required ? null : (
           <button
             type="button"
             onClick={dismiss}
@@ -189,7 +173,33 @@ export function DrawEntryDialog({
           >
             Not now
           </button>
+          )}
         </form>
+  );
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="draw-entry-title"
+      className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-[#274b3a]/45"
+      onClose={() => {
+        if (closedBy.current === "saved") {
+          closedBy.current = "dismiss";
+          return;
+        }
+        onDismiss();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) dismiss();
+      }}
+    >
+      <div
+        className="flex h-full items-end justify-center sm:items-center sm:p-6"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) dismiss();
+        }}
+      >
+        {sheet}
       </div>
     </dialog>
   );
