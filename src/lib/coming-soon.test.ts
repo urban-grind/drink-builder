@@ -65,7 +65,9 @@ describe("coming soon gate", () => {
   it("lets the cafe into review and keeps the contest covered", () => {
     const id = "11111111-1111-4111-8111-111111111111";
     assert.equal(comingSoonAllowsReview("/photos/review", false), true);
+    assert.equal(comingSoonAllowsReview("/photos/recap", false), true);
     assert.equal(comingSoonAllowsReview("/api/photos/review", false), true);
+    assert.equal(comingSoonAllowsReview("/api/photos/review/race", false), true);
     assert.equal(comingSoonAllowsReview("/api/photos/review/login", false), true);
     assert.equal(comingSoonAllowsReview("/api/photos", false), false);
     assert.equal(comingSoonAllowsReview("/api/photos/upload", false), false);

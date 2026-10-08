@@ -30,11 +30,19 @@ const REVIEW_ENTRY =
  * Unsigned visitors get the login screen and an empty list. The public contest stays covered.
  */
 export function comingSoonAllowsReview(pathname: string, reviewer: boolean): boolean {
-  if (pathname === "/photos/review" || pathname === "/photos/review/") return true;
+  if (
+    pathname === "/photos/review" ||
+    pathname === "/photos/review/" ||
+    pathname === "/photos/recap" ||
+    pathname === "/photos/recap/"
+  ) {
+    return true;
+  }
   if (
     pathname === "/api/photos/review" ||
     pathname === "/api/photos/review/login" ||
-    pathname === "/api/photos/review/logout"
+    pathname === "/api/photos/review/logout" ||
+    pathname === "/api/photos/review/race"
   ) {
     return true;
   }
