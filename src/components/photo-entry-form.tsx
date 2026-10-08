@@ -289,6 +289,7 @@ export function PhotoEntryForm({
       const entry: OwnerEntry = {
         personName: parsed.value.personName,
         drinkName: parsed.value.drinkName,
+        caption: parsed.value.caption,
         photoUrl: `/api/photos/${saved.id}/image?variant=vote`,
         code: saved.code || "",
         createdAt: new Date().toISOString(),
@@ -335,6 +336,7 @@ export function PhotoEntryForm({
         mode="owner"
         personName={saved.personName}
         drinkName={saved.drinkName}
+        caption={saved.caption}
         photoUrl={saved.photoUrl}
         voteCount={0}
         createdAt={saved.createdAt}

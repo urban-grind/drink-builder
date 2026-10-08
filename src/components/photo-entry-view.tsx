@@ -11,6 +11,7 @@ import { ownerPlaceLine, ownerStandingBanner } from "@/lib/photo-standing";
 export type OwnerEntry = {
   personName: string;
   drinkName: string;
+  caption?: string;
   photoUrl: string;
   code: string;
   createdAt: string;
@@ -26,6 +27,7 @@ export function PhotoEntryView({
   mode,
   personName,
   drinkName,
+  caption = "",
   photoUrl,
   voteCount,
   rank = null,
@@ -43,6 +45,7 @@ export function PhotoEntryView({
   mode: "owner" | "visitor";
   personName: string;
   drinkName: string;
+  caption?: string;
   photoUrl: string;
   voteCount: number;
   rank?: number | null;
@@ -61,6 +64,8 @@ export function PhotoEntryView({
   const linkId = useId();
   const name = firstName(personName) || "Someone";
   const drink = drinkName.trim();
+  const line = caption.trim();
+  const showCaption = line.length > 0 && line !== drink;
   const [href, setHref] = useState(entryPath);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -178,7 +183,7 @@ export function PhotoEntryView({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photoUrl}
-            alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
+            alt={[drink, showCaption ? line : ""].filter(Boolean).join(". ") || `Photo by ${name}`}
             className="aspect-[4/5] w-full bg-[#e7e4de] object-cover"
           />
         </button>
@@ -274,17 +279,18 @@ export function PhotoEntryView({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={photoUrl}
-              alt={drink ? `${drink} by ${name}` : `Photo by ${name}`}
+              alt={[drink, showCaption ? line : ""].filter(Boolean).join(". ") || `Photo by ${name}`}
               className="max-h-full max-w-full object-contain"
             />
           </div>
         </div>
       </dialog>
       <div className="mt-3 shrink-0 rounded-2xl bg-white px-4 py-3 shadow-[0_10px_28px_rgb(39_75_58/0.06)]">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-lg leading-tight font-bold">{name}</p>
-            {drink ? <p className="truncate text-sm text-[#274b3a]/65">{drink}</p> : null}
+            <p className="font-heading text-2xl leading-tight font-semibold">{name}</p>
+            {drink ? <p className="mt-1 text-base leading-snug">{drink}</p> : null}
+            {showCaption ? <p className="mt-1 text-[15px] leading-snug text-pretty">{line}</p> : null}
           </div>
           {mode === "visitor" ? (
             <p className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold">

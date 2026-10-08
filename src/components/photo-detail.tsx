@@ -150,6 +150,7 @@ export function PhotoDetail({
         mode="visitor"
         personName={photo.personName}
         drinkName={photo.drinkName}
+        caption={photo.caption}
         photoUrl={photo.imageUrl}
         voteCount={photo.voteCount}
         createdAt={photo.createdAt}

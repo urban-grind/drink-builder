@@ -31,12 +31,6 @@ type Screen = "vote" | "picks" | "mine" | "faq" | "upload" | "entry" | "entered"
 type ReturnScreen = "vote" | "picks" | "mine" | "faq" | "entry" | "entered";
 type TabId = "vote" | "mine" | "picks" | "faq";
 
-function shortDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
-}
-
 function deckPath(voterId: string, except: string[]): string {
   const params = new URLSearchParams({ voterId, limit: String(DECK_PAGE) });
   if (except.length > 0) params.set("except", except.join(","));
@@ -50,7 +44,6 @@ function wait(ms: number): Promise<void> {
 }
 
 function CardFace({ photo }: { photo: PublicPhoto }) {
-  const date = shortDate(photo.createdAt);
   const name = photo.personName.trim();
   const drink = photo.drinkName.trim();
   const caption = photo.caption.trim();
@@ -65,13 +58,13 @@ function CardFace({ photo }: { photo: PublicPhoto }) {
         draggable={false}
         className="pointer-events-none absolute inset-0 h-full w-full object-cover"
       />
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-3.5 pt-16 pb-3.5 text-white">
-        <p className="text-[15px] leading-tight font-medium text-white/90">
-          {name}
-          {date ? ` · ${date}` : ""}
-        </p>
-        {drink ? <p className="mt-0.5 text-[15px] leading-tight font-medium">{drink}</p> : null}
-        {showCaption ? <p className="mt-1 line-clamp-3 text-xs leading-snug text-white/85">{caption}</p> : null}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 text-[#274b3a]">
+        <div className="h-8 bg-gradient-to-t from-white/90 to-transparent" />
+        <div className="bg-white/90 px-3.5 pt-1.5 pb-2.5">
+          <p className="font-heading text-xl leading-tight font-bold">{name}</p>
+          {drink ? <p className="mt-0.5 text-sm leading-snug font-normal">{drink}</p> : null}
+          {showCaption ? <p className="mt-0.5 text-[13px] leading-snug text-pretty">{caption}</p> : null}
+        </div>
       </div>
     </>
   );
@@ -748,6 +741,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
               setEntered({
                 personName: photo.personName,
                 drinkName: photo.drinkName,
+                caption: photo.caption,
                 photoUrl: photo.imageUrl,
                 code: photo.code,
                 createdAt: photo.createdAt,
@@ -821,6 +815,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
             mode="owner"
             personName={entered.personName}
             drinkName={entered.drinkName}
+            caption={entered.caption}
             photoUrl={entered.photoUrl}
             voteCount={enteredVotes}
             rank={enteredRank}
