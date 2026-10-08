@@ -186,6 +186,9 @@ export function PhotoReview() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a href="/photos/recap" className="inline-flex h-11 items-center rounded-full bg-[#274b3a] px-4 text-sm font-bold text-white">
+            Daily Recap
+          </a>
           <Button
             type="button"
             onClick={() => {
