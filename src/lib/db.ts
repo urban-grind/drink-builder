@@ -140,6 +140,7 @@ function ensurePhotoTables(db: DatabaseSync): void {
       photo_id TEXT NOT NULL,
       voter_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      network_hash TEXT,
       PRIMARY KEY (photo_id, voter_id),
       FOREIGN KEY (photo_id) REFERENCES photo_entries(id)
     );
@@ -201,6 +202,17 @@ function ensurePhotoTables(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_photo_entries_phone
       ON photo_entries (phone) WHERE phone IS NOT NULL;
   `);
+  ensureVoteNetwork(db);
+}
+
+function ensureVoteNetwork(db: DatabaseSync): void {
+  const columns = db.prepare("PRAGMA table_info(photo_votes)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "network_hash")) {
+    db.exec("ALTER TABLE photo_votes ADD COLUMN network_hash TEXT");
+  }
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_photo_votes_network ON photo_votes (photo_id, network_hash, created_at)",
+  );
 }
 
 function ensureUploadPrepareColumns(db: DatabaseSync): void {

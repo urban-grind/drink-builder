@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/photo-contest.test.ts src/lib/entry-countdown.test.ts src/lib/coming-soon.test.ts src/lib/eastern-day.test.ts src/lib/draw-entry.test.ts src/lib/coming-soon-stats.test.ts src/lib/contest-clock.test.ts src/lib/contest-stats.test.ts src/lib/people.test.ts"
+    "test": "tsx --test src/lib/photo-contest.test.ts src/lib/entry-countdown.test.ts src/lib/coming-soon.test.ts src/lib/eastern-day.test.ts src/lib/draw-entry.test.ts src/lib/coming-soon-stats.test.ts src/lib/contest-clock.test.ts src/lib/contest-stats.test.ts src/lib/people.test.ts src/lib/vote-network.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1143.0",

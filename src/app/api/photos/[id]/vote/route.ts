@@ -3,6 +3,7 @@ import { readPhotoJson } from "@/lib/photo-http";
 import { castPhotoVote } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
 import { isUuid, parseVoterId } from "@/lib/validation";
+import { NETWORK_VOTE_LIMIT_MESSAGE, networkHashFrom } from "@/lib/vote-network";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,8 +32,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   try {
-    const result = castPhotoVote(id, voter.voterId);
+    const result = castPhotoVote(id, voter.voterId, networkHashFrom(request.headers));
     if (!result.ok) {
+      if (result.code === "NETWORK_LIMIT") {
+        return jsonError(429, result.code, NETWORK_VOTE_LIMIT_MESSAGE);
+      }
       const status = result.code === "NOT_FOUND" ? 404 : 409;
       return jsonError(status, result.code, messages[result.code]);
     }

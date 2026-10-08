@@ -554,7 +554,7 @@ export function PhotoDeck({ entryCode }: { entryCode?: string }) {
                 </button>
                 <button
                   type="button"
-                  onClick={scrollToSwipe}
+                  onClick={() => scrollToSwipe()}
                   className="inline-flex rounded-full bg-[#274b3a] px-4 py-2 text-[11px] font-bold tracking-[0.12em] text-[#f3f2ef] uppercase"
                 >
                   Start swiping
