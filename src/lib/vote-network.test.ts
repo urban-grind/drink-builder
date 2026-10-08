@@ -62,7 +62,7 @@ describe("votes from one network", () => {
     else process.env.DRINK_DB_PATH = previousDb;
   });
 
-  it("allows three votes on a photo each hour, then waits", () => {
+  it("allows three votes on a photo every five minutes, then waits", () => {
     const photoId = insertEntry();
     for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
       const saved = swipeDeckPhoto(photoId, randomUUID(), "vote", cafe);
@@ -79,7 +79,7 @@ describe("votes from one network", () => {
     assert.equal(voteCount(photoId), NETWORK_VOTES_PER_PHOTO + 1);
   });
 
-  it("does not count a skip or a vote from more than an hour ago", () => {
+  it("does not count a skip or a vote from outside the five-minute window", () => {
     const photoId = insertEntry();
     for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
       assert.equal(swipeDeckPhoto(photoId, randomUUID(), "skip", cafe).ok, true);
