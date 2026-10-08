@@ -848,11 +848,17 @@ describe("photo contest", { concurrency: false }, () => {
     vote.run(todayId, "voter-today", "2026-10-05T19:00:00.000Z");
     vote.run(olderId, "voter-older", "2026-10-04T19:00:00.000Z");
     vote.run(pendingId, "voter-pending", "2026-10-05T19:00:00.000Z");
+    const skip = db.prepare(
+      "INSERT INTO photo_swipes (voter_id, photo_id, action, created_at) VALUES (?, ?, 'skip', ?)",
+    );
+    skip.run("skip-today", todayId, "2026-10-05T20:00:00.000Z");
+    skip.run("skip-older", olderId, "2026-10-04T20:00:00.000Z");
+    skip.run("skip-pending", pendingId, "2026-10-05T20:00:00.000Z");
     const after = contestActivity(now);
     assert.equal(after.photos, before.photos + 2);
     assert.equal(after.photosToday, before.photosToday + 1);
-    assert.equal(after.votes, before.votes + 2);
-    assert.equal(after.votesToday, before.votesToday + 1);
+    assert.equal(after.votes, before.votes + 4);
+    assert.equal(after.votesToday, before.votesToday + 2);
   });
 
   it("allows another photo with the same email or phone", async () => {

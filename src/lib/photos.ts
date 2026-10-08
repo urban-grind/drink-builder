@@ -166,7 +166,7 @@ export function standingsFor(ordered: { id: string; voteCount: number }[]): Map<
   return standings;
 }
 
-/** Highest vote count first. Equal counts use the higher like percentage. */
+/** Highest yes-vote count first. Equal counts use the higher like percentage. */
 export function compareLeaderboard(
   a: { voteCount: number; skipCount: number },
   b: { voteCount: number; skipCount: number },
@@ -277,19 +277,28 @@ export function contestActivity(now = new Date()): ContestActivity {
          (SELECT COUNT(*) FROM photo_votes v
            JOIN photo_entries e ON e.id = v.photo_id
            WHERE e.status = 'approved' AND ${sampleVisibilitySql()}
-             AND v.created_at >= ? AND v.created_at < ?) AS votes_today`,
+             AND v.created_at >= ? AND v.created_at < ?) AS votes_today,
+         (SELECT COUNT(*) FROM photo_swipes s
+           JOIN photo_entries e ON e.id = s.photo_id
+           WHERE s.action = 'skip' AND e.status = 'approved' AND ${sampleVisibilitySql()}) AS skips,
+         (SELECT COUNT(*) FROM photo_swipes s
+           JOIN photo_entries e ON e.id = s.photo_id
+           WHERE s.action = 'skip' AND e.status = 'approved' AND ${sampleVisibilitySql()}
+             AND s.created_at >= ? AND s.created_at < ?) AS skips_today`,
     )
-    .get(flag, flag, day.start, day.end, flag, flag, day.start, day.end) as {
+    .get(flag, flag, day.start, day.end, flag, flag, day.start, day.end, flag, flag, day.start, day.end) as {
     photos: number;
     photos_today: number;
     votes: number;
     votes_today: number;
+    skips: number;
+    skips_today: number;
   };
   return {
     photos: Number(row.photos),
-    votes: Number(row.votes),
+    votes: Number(row.votes) + Number(row.skips),
     photosToday: Number(row.photos_today),
-    votesToday: Number(row.votes_today),
+    votesToday: Number(row.votes_today) + Number(row.skips_today),
   };
 }
 
