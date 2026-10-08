@@ -1150,4 +1150,62 @@ describe("photo contest", { concurrency: false }, () => {
       resetDbForTests();
     }
   });
+
+  it("deals a lightly swiped photo ahead of one people have already passed on", () => {
+    const env = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = env.NODE_ENV;
+    const db = getDb();
+    const freshId = crypto.randomUUID();
+    const tiredId = crypto.randomUUID();
+    const voter = crypto.randomUUID();
+    try {
+      env.NODE_ENV = "production";
+      const insert = db.prepare(
+        `INSERT INTO photo_entries (
+          id, person_name, email, phone, drink_name, caption, status, original_key, content_type, vote_key, thumb_key, created_at, public_code
+        ) VALUES (?, 'Ada', NULL, NULL, ?, '', 'approved', ?, 'image/jpeg', 'vote', 'thumb', ?, ?)`,
+      );
+      insert.run(freshId, "Fresh cup", `deck-order/${freshId}`, "2026-10-08T12:00:00.000Z", "deckf1");
+      insert.run(tiredId, "Tired cup", `deck-order/${tiredId}`, "2026-10-01T12:00:00.000Z", "deckt1");
+      const vote = db.prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at) VALUES (?, ?, ?)");
+      for (let index = 0; index < 5; index += 1) {
+        const id = `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+        vote.run(freshId, id, "2026-10-08T15:00:00.000Z");
+        vote.run(tiredId, id, "2026-10-08T15:00:00.000Z");
+      }
+      const skip = db.prepare(
+        "INSERT INTO photo_swipes (voter_id, photo_id, action, created_at) VALUES (?, ?, 'skip', ?)",
+      );
+      for (let index = 0; index < 75; index += 1) {
+        const id = `00000000-0000-4000-8001-${String(index + 1).padStart(12, "0")}`;
+        skip.run(id, tiredId, "2026-10-08T16:00:00.000Z");
+      }
+      const others = db
+        .prepare(
+          `SELECT id FROM photo_entries
+           WHERE status = 'approved' AND id NOT IN (?, ?) AND original_key NOT LIKE 'local-sample/%'`,
+        )
+        .all(freshId, tiredId) as { id: string }[];
+      const hide = db.prepare(
+        "INSERT OR IGNORE INTO photo_swipes (voter_id, photo_id, action, created_at) VALUES (?, ?, 'skip', ?)",
+      );
+      for (const other of others) hide.run(voter, other.id, "2026-10-08T17:00:00.000Z");
+
+      let freshFirst = 0;
+      const trials = 200;
+      for (let trial = 0; trial < trials; trial += 1) {
+        const [first] = listPhotoDeck(voter, { limit: 1 });
+        assert.ok(first);
+        assert.ok(first.id === freshId || first.id === tiredId);
+        if (first.id === freshId) freshFirst += 1;
+      }
+      assert.ok(freshFirst / trials > 0.8);
+    } finally {
+      db.prepare("DELETE FROM photo_swipes WHERE photo_id IN (?, ?) OR voter_id = ?").run(freshId, tiredId, voter);
+      db.prepare("DELETE FROM photo_votes WHERE photo_id IN (?, ?)").run(freshId, tiredId);
+      db.prepare("DELETE FROM photo_entries WHERE id IN (?, ?)").run(freshId, tiredId);
+      if (previousNodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previousNodeEnv;
+    }
+  });
 });

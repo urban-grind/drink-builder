@@ -1,3 +1,10 @@
+/** How many photos the public leaderboard shows. */
+export const LEADERBOARD_SIZE = 25;
+
+export function showsOnLeaderboard(rank: number | null): boolean {
+  return rank != null && rank >= 1 && rank <= LEADERBOARD_SIZE;
+}
+
 function ordinal(rank: number): string {
   const mod100 = rank % 100;
   if (mod100 >= 11 && mod100 <= 13) return `${rank}th`;

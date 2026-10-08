@@ -11,7 +11,8 @@ import { getPhotoStorage } from "@/lib/r2";
 import type { ContestActivity, LeaderboardEntry, OwnedPhoto, PhotoStatus, PublicPhoto, ReviewPhoto } from "@/lib/photo-types";
 import { easternDayRange } from "@/lib/eastern-day";
 import { parsePhotoContact, validatePhotoEntry } from "@/lib/photo-validation";
-import type { FieldErrors } from "@/lib/types";
+import { dealDeck } from "@/lib/deck-order";
+import { LEADERBOARD_SIZE } from "@/lib/photo-standing";
 
 export const NEW_PHOTO_LIMIT = 10;
 
@@ -182,7 +183,7 @@ export function compareLeaderboard(
 export const LEADERBOARD_LIMIT = 20;
 
 /** How many photos the public leaderboard shows. */
-export const LEADERBOARD_SIZE = 25;
+export { LEADERBOARD_SIZE };
 
 /** How many leaderboard photos the phone asks for as the list scrolls. */
 export const LEADERBOARD_PAGE_SIZE = 4;
@@ -314,6 +315,7 @@ export function contestActivity(now = new Date()): ContestActivity {
  * The next few approved photos this voter has not voted on or skipped.
  * Pending uploads stay off the deck until the cafe approves them.
  * `except` is the small stack already on the phone, so those images are not sent again.
+ * Photos with fewer votes and skips are more likely to lead. A popular photo can still lead.
  */
 export function listPhotoDeck(
   voterId: string,
@@ -325,20 +327,28 @@ export function listPhotoDeck(
   const exceptSql = except.length > 0 ? ` AND e.id NOT IN (${except.map(() => "?").join(", ")})` : "";
   const rows = getDb()
     .prepare(
-      `${selectEntry}
-       WHERE e.status = 'approved'
-         AND ${sampleVisibilitySql()}
-         AND e.id NOT IN (
-           SELECT photo_id FROM photo_votes WHERE voter_id = ?
-           UNION
-           SELECT photo_id FROM photo_swipes WHERE voter_id = ?
-         )
-         ${exceptSql}
-       ORDER BY RANDOM()
-       LIMIT ?`,
+      `SELECT candidate.*,
+         (SELECT COUNT(*) FROM photo_swipes s WHERE s.photo_id = candidate.id AND s.action = 'skip') AS skip_count
+       FROM (
+         ${selectEntry}
+         WHERE e.status = 'approved'
+           AND ${sampleVisibilitySql()}
+           AND e.id NOT IN (
+             SELECT photo_id FROM photo_votes WHERE voter_id = ?
+             UNION
+             SELECT photo_id FROM photo_swipes WHERE voter_id = ?
+           )
+           ${exceptSql}
+       ) candidate`,
     )
-    .all(voterId, sampleVisibilityFlag(), voterId, voterId, ...except, limit) as EntryRow[];
-  return rows.map(toPublic);
+    .all(voterId, sampleVisibilityFlag(), voterId, voterId, ...except) as (EntryRow & { skip_count: number })[];
+  const dealt = dealDeck(
+    rows.map((row) => ({
+      row,
+      swipes: Number(row.vote_count) + Number(row.skip_count),
+    })),
+  );
+  return dealt.slice(0, limit).map((item) => toPublic(item.row));
 }
 
 function networkVoteLimitReached(

@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { ContactField } from "@/components/contact-field";
 import { Button } from "@/components/ui/button";
-import { ownerStandingLine } from "@/lib/photo-standing";
+import { ownerStandingLine, showsOnLeaderboard } from "@/lib/photo-standing";
 import { formatStoredPhone, parseTypedContact } from "@/lib/photo-validation";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
 import { rememberMyPhoto } from "@/lib/local-votes";
@@ -121,6 +121,9 @@ export function MyPhotos({
                 <img src={photo.thumbUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{photo.drinkName}</span>
+                  {photo.status === "approved" && showsOnLeaderboard(photo.rank) ? (
+                    <span className="mt-0.5 block text-sm font-semibold text-[#274b3a]">You're on the leaderboard</span>
+                  ) : null}
                   <span className="mt-0.5 block text-sm text-[#274b3a]/70">
                     {ownerStandingLine({
                       live: photo.status === "approved",
