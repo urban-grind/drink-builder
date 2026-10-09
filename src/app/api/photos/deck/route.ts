@@ -4,7 +4,7 @@ import { readPhotoJson } from "@/lib/photo-http";
 import { DECK_PAGE_SIZE, listPhotoDeck, swipeDeckPhoto } from "@/lib/photos";
 import { safeErrorText } from "@/lib/safe-log";
 import { isUuid, parseVoterId } from "@/lib/validation";
-import { NETWORK_VOTE_LIMIT_MESSAGE, networkHashFrom } from "@/lib/vote-network";
+import { networkHashFrom } from "@/lib/vote-network";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,9 +78,6 @@ export async function POST(request: Request) {
     if (!result.ok) {
       if (result.code === "SIGNUP_REQUIRED") {
         return jsonError(403, result.code, "Sign up to keep swiping.");
-      }
-      if (result.code === "NETWORK_LIMIT") {
-        return jsonError(429, result.code, NETWORK_VOTE_LIMIT_MESSAGE);
       }
       const status = result.code === "NOT_FOUND" ? 404 : 409;
       const message = result.code === "NOT_FOUND" ? "That photo isn't here." : "You already passed on this photo.";

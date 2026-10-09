@@ -356,8 +356,12 @@ function networkVoteLimitReached(db: DatabaseSync, networkHash: string | null | 
   if (!networkHash) return false;
   const row = db
     .prepare(
-      `SELECT COUNT(*) AS count FROM photo_votes
-       WHERE network_hash = ? AND created_at > ?`,
+      `SELECT COUNT(*) AS count FROM photo_votes v
+       WHERE v.network_hash = ? AND v.created_at > ?
+         AND NOT EXISTS (
+           SELECT 1 FROM photo_swipes s
+           WHERE s.voter_id = v.voter_id AND s.photo_id = v.photo_id AND s.action = 'vote'
+         )`,
     )
     .get(networkHash, networkVoteCutoff(new Date(now))) as { count: number };
   return Number(row.count) >= 1;
@@ -370,7 +374,7 @@ export function swipeDeckPhoto(
   networkHash?: string | null,
 ):
   | { ok: true; photo: PublicPhoto }
-  | { ok: false; code: "NOT_FOUND" | "ALREADY_ACTED" | "SIGNUP_REQUIRED" | "NETWORK_LIMIT" } {
+  | { ok: false; code: "NOT_FOUND" | "ALREADY_ACTED" | "SIGNUP_REQUIRED" } {
   const db = beginImmediate();
   try {
     const photo = db
@@ -404,10 +408,6 @@ export function swipeDeckPhoto(
     }
     const now = new Date().toISOString();
     if (action === "vote") {
-      if (networkVoteLimitReached(db, networkHash, now)) {
-        db.exec("ROLLBACK");
-        return { ok: false, code: "NETWORK_LIMIT" };
-      }
       db.prepare(
         "INSERT INTO photo_votes (photo_id, voter_id, created_at, network_hash) VALUES (?, ?, ?, ?)",
       ).run(photoId, voterId, now, networkHash ?? null);
