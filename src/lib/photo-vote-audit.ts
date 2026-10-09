@@ -67,9 +67,14 @@ export function auditPhotoVotes(photoId: string): VoteAudit | null {
     votes: [...rows].reverse().map((row) => ({
       at: easternStamp(row.created_at, true),
       browserId: row.voter_id,
+      networkId: networkLabel(row.network_hash),
       page: Number(row.from_deck) === 1 ? "Swipe" : "Photo page",
     })),
   };
+}
+
+function networkLabel(hash: string | null): string {
+  return hash || "None";
 }
 
 function whenLabel(start: string, end: string): string {

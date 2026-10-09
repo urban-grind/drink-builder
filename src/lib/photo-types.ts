@@ -41,7 +41,7 @@ export type VoteAudit = {
   fromPhotoPage: number;
   onlyThisPhoto: number;
   networks: { label: string; votes: number; when: string }[];
-  votes: { at: string; browserId: string; page: "Swipe" | "Photo page" }[];
+  votes: { at: string; browserId: string; networkId: string; page: "Swipe" | "Photo page" }[];
 };
 
 /** Public board totals, plus what arrived since midnight Eastern. */

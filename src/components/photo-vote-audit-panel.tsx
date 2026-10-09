@@ -41,6 +41,7 @@ export function VoteAuditPanel({
             <tr className="text-[#274b3a]/70">
               <th className="py-1 pr-3 font-semibold">Time</th>
               <th className="py-1 pr-3 font-semibold">Browser id</th>
+              <th className="py-1 pr-3 font-semibold">Network</th>
               <th className="py-1 font-semibold">Page</th>
             </tr>
           </thead>
@@ -49,6 +50,7 @@ export function VoteAuditPanel({
               <tr key={vote.browserId} className="border-t border-[#274b3a]/12 align-top">
                 <td className="py-1.5 pr-3 whitespace-nowrap">{vote.at}</td>
                 <td className="py-1.5 pr-3 font-mono text-xs break-all">{vote.browserId}</td>
+                <td className="py-1.5 pr-3 font-mono text-xs break-all">{vote.networkId}</td>
                 <td className="py-1.5 whitespace-nowrap">{vote.page}</td>
               </tr>
             ))}

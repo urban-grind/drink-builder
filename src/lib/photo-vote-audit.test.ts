@@ -71,9 +71,13 @@ describe("photo vote audit", () => {
     assert.equal(audit.networks[1]?.label, "No network recorded");
     assert.equal(audit.networks[2]?.label, "Network 2");
     assert.equal(audit.votes[0]?.browserId, shared);
+    assert.equal(audit.votes[0]?.networkId, "hash-cell");
     assert.equal(audit.votes[0]?.page, "Swipe");
     const fromPage = audit.votes.find((vote) => vote.browserId === pageVoter);
+    assert.equal(fromPage?.networkId, "hash-cafe");
     assert.equal(fromPage?.page, "Photo page");
+    const missing = audit.votes.find((vote) => vote.networkId === "None");
+    assert.ok(missing);
     assert.match(fromPage?.at ?? "", /10:30:00/);
     assert.equal(auditPhotoVotes(randomUUID()), null);
   });
