@@ -1,7 +1,7 @@
 import type { DrinkSale } from "@/lib/drink-stats";
 
 /** How often completed Square orders are pulled. */
-export const SQUARE_POLL_MS = 10 * 60 * 1000;
+export const SQUARE_POLL_MS = 30 * 60 * 1000;
 
 const SQUARE_VERSION = "2026-01-22";
 const SQUARE_ORIGIN = "https://connect.squareup.com";
@@ -39,7 +39,7 @@ export type SquareOrder = {
   returns?: { created_at?: string; return_line_items?: SquareLine[] }[];
 };
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const ORDER_ORIGIN = "https://www.urbangrind.ca";
 
 type SalesCache = { version: number; at: number; rangeStart: string; sales: DrinkSale[] };
@@ -69,6 +69,12 @@ export function startSquarePoll(rangeStart: () => string): void {
     void refreshSquareSales(rangeStart());
   }, SQUARE_POLL_MS);
   current.timer.unref?.();
+}
+
+/** When the sales in memory were last pulled. Null before the first successful pull. */
+export function squareSalesUpdatedAt(): number | null {
+  const at = slot().cache?.at;
+  return typeof at === "number" ? at : null;
 }
 
 export async function loadCachedSquareSales(rangeStart: string): Promise<DrinkSale[]> {

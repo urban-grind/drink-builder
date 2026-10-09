@@ -1,13 +1,15 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { requestPour } from "@/components/pour-pause";
-import type { DrinkStats, DrinkTotal } from "@/lib/drink-stats";
+import { popularDrinkClick } from "@/lib/contest-report";
+import { trackContest } from "@/lib/contest-track";
+import { drinkUpdatedLabel, type DrinkStats, type DrinkTotal } from "@/lib/drink-stats";
 
 const TABS = [
-  ["day", "Today", "Popular today"],
-  ["week", "This week", "Popular this week"],
-  ["month", "This month", "Popular this month"],
+  ["day", "Today", "Popular today", "popular-today"],
+  ["week", "This week", "Popular this week", "popular-week"],
+  ["month", "This month", "Popular this month", "popular-month"],
 ] as const;
 
 const FEATURED = 3;
@@ -16,7 +18,7 @@ const GROW = `top ${GROW_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1), left ${GROW_MS
 
 type DrinkOrigin = { top: number; left: number; width: number; height: number };
 
-export function TopDrinks({ stats }: { stats: DrinkStats }) {
+export function TopDrinks({ stats, updatedAt }: { stats: DrinkStats; updatedAt: number | null }) {
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("day");
   const [selected, setSelected] = useState<{ drink: DrinkTotal; origin: DrinkOrigin } | null>(null);
   const current = TABS.find((item) => item[0] === tab) ?? TABS[0];
@@ -24,15 +26,22 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
   const featured = drinks.slice(0, FEATURED);
   const rest = drinks.slice(FEATURED);
 
+  useEffect(() => {
+    trackContest("visit", "popular");
+  }, []);
+
   function openDrink(drink: DrinkTotal, source: HTMLElement) {
+    trackContest("click", popularDrinkClick("popular-drink", drink.name));
     setSelected({ drink, origin: readOrigin(source) });
   }
 
   function chooseTab(key: (typeof TABS)[number][0]) {
     if (key === tab) return;
+    const next = TABS.find((item) => item[0] === key);
     setSelected(null);
     setTab(key);
     requestPour();
+    if (next) trackContest("click", next[3]);
   }
 
   return (
@@ -60,13 +69,14 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
       </div>
 
       <h1 className="mt-8 font-heading text-4xl leading-none text-[#274b3a]">{current[2]}</h1>
+      <LiveFromCafe updatedAt={updatedAt} />
 
       {drinks.length === 0 ? <p className="mt-4 text-sm text-[#274b3a]/70">No drinks yet.</p> : null}
 
       {featured.length === 0 ? null : (
         <div className={`mt-4 grid gap-3 ${featured.length === 1 ? "grid-cols-1" : featured.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
           {featured.map((drink, index) => (
-            <DrinkCard key={drink.name} drink={drink} rank={index + 1} onOpen={openDrink} />
+            <DrinkCard key={drink.name} drink={drink} onOpen={openDrink} />
           ))}
         </div>
       )}
@@ -83,7 +93,10 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
               >
                 <span className="w-6 shrink-0 font-normal text-[#7d9488]">{index + FEATURED + 1}</span>
                 <DrinkPhoto imageUrl={drink.imageUrl} />
-                <DrinkName name={drink.name} className="min-w-0 flex-1 leading-tight" />
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <DrinkName name={drink.name} className="leading-tight" />
+                  <DrinkBadges badges={drink.badges} />
+                </span>
               </button>
             </li>
           ))}
@@ -93,6 +106,52 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
       <DrinkDetail drink={selected?.drink ?? null} origin={selected?.origin ?? null} onClose={() => setSelected(null)} />
     </div>
   );
+}
+
+function LiveFromCafe({ updatedAt }: { updatedAt: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const updated = updatedAt === null ? null : drinkUpdatedLabel(updatedAt, now);
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#274b3a]">
+      <span className="inline-flex items-center gap-2 font-semibold">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[#3d8f5a]" aria-hidden="true" />
+        Live from the Cafe
+      </span>
+      {updated ? <span className="text-[#274b3a]/70">· {updated}</span> : null}
+    </p>
+  );
+}
+
+function DrinkBadges({ badges, compact = false }: { badges: DrinkTotal["badges"]; compact?: boolean }) {
+  if (badges.length === 0) return null;
+  return (
+    <span className={`flex flex-wrap gap-1 ${compact ? "flex-col items-start" : ""}`}>
+      {badges.map((badge) => (
+        <span
+          key={`${badge.tone}-${badge.label}`}
+          className={`${badgeClass(badge.tone)} ${compact ? "max-w-full px-2 py-1 text-center text-[11px] leading-tight" : "px-2 py-0.5 text-xs leading-none"}`}
+        >
+          {compact ? shortBadge(badge) : badge.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function shortBadge(badge: DrinkTotal["badges"][number]): string {
+  if (badge.tone === "up") return badge.label.replace(/ spots$/, "");
+  return badge.label;
+}
+
+function badgeClass(tone: DrinkTotal["badges"][number]["tone"]): string {
+  const base = "inline-flex items-center rounded-full font-bold shadow-sm";
+  if (tone === "up") return `${base} bg-[#2f9e5a] text-white`;
+  if (tone === "streak") return `${base} bg-[#274b3a] text-[#f7f4ec]`;
+  return `${base} bg-[#e7f3ea] text-[#274b3a]`;
 }
 
 function DrinkName({ name, className }: { name: string; className: string }) {
@@ -106,7 +165,7 @@ function DrinkName({ name, className }: { name: string; className: string }) {
   );
 }
 
-function DrinkCard({ drink, rank, onOpen }: { drink: DrinkTotal; rank: number; onOpen: (drink: DrinkTotal, source: HTMLElement) => void }) {
+function DrinkCard({ drink, onOpen }: { drink: DrinkTotal; onOpen: (drink: DrinkTotal, source: HTMLElement) => void }) {
   return (
     <button
       type="button"
@@ -115,8 +174,8 @@ function DrinkCard({ drink, rank, onOpen }: { drink: DrinkTotal; rank: number; o
       className="!flex !h-auto !w-full !flex-col !items-stretch !gap-2 !rounded-2xl !bg-white !p-3 !text-left !font-semibold !text-[#274b3a] shadow-[0_10px_24px_rgb(39_75_58/0.06)] hover:!bg-white"
     >
       <DrinkPhoto imageUrl={drink.imageUrl} large />
-      <span className="text-sm font-normal text-[#7d9488]">{rank}</span>
       <DrinkName name={drink.name} className="text-sm leading-tight text-pretty" />
+      <DrinkBadges badges={drink.badges} compact />
     </button>
   );
 }
@@ -260,6 +319,7 @@ function DrinkDetail({ drink, origin, onClose }: { drink: DrinkTotal | null; ori
                   href={drink.orderUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackContest("click", popularDrinkClick("popular-order", drink.name))}
                   className="mt-5 inline-flex h-11 items-center rounded-full bg-[#274b3a] px-5 text-sm font-bold text-white"
                 >
                   Order

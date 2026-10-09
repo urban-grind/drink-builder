@@ -22,7 +22,7 @@ export function SiteHeader() {
     );
   }
 
-  const review = pathname === "/photos/review";
+  const review = pathname === "/photos/review" || pathname === "/photos/analytics";
 
   return (
     <header className="sticky top-0 z-[80] border-b border-[#274b3a]/10 bg-[#f3f2ef]/95 backdrop-blur-sm">

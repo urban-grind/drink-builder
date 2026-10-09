@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { emptyContestReport, type ContestReport } from "@/lib/contest-report";
 import type { PersonRecord } from "@/lib/people";
 import { formatStoredPhone } from "@/lib/photo-validation";
 import type { PhotoStatus, ReviewPhoto, VoteAudit } from "@/lib/photo-types";
@@ -17,7 +16,6 @@ type ReviewPayload = {
   authenticated: boolean;
   photos: ReviewPhoto[];
   people: PersonRecord[];
-  activity: ContestReport;
 };
 
 const groups: { status: PhotoStatus; title: string; empty: string }[] = [
@@ -118,7 +116,7 @@ export function PhotoReview() {
 
   async function logout() {
     await requestJson("/api/photos/review/logout", { method: "POST", body: JSON.stringify({}) });
-    setPayload({ configured: true, authenticated: false, photos: [], people: [], activity: emptyContestReport() });
+    setPayload({ configured: true, authenticated: false, photos: [], people: [] });
   }
 
   if (status === "loading") {
@@ -186,6 +184,9 @@ export function PhotoReview() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a href="/photos/analytics" className="inline-flex h-11 items-center rounded-full bg-[#274b3a] px-4 text-sm font-bold text-white">
+            Site activity
+          </a>
           <a href="/photos/recap" className="inline-flex h-11 items-center rounded-full bg-[#274b3a] px-4 text-sm font-bold text-white">
             Daily Recap
           </a>
@@ -236,7 +237,6 @@ export function PhotoReview() {
           {error}
         </p>
       ) : null}
-      <VisitReport report={payload.activity ?? emptyContestReport()} />
       <PeopleList people={payload.people ?? []} />
       {groups.map((group) => {
         const photos = payload.photos.filter((photo) => photo.status === group.status);
@@ -307,68 +307,6 @@ export function PhotoReview() {
       })}
     </div>
   );
-}
-
-function VisitReport({ report }: { report: ContestReport }) {
-  return (
-    <section aria-labelledby="review-visits" className="flex flex-col gap-4">
-      <div>
-        <h2 id="review-visits" className="text-3xl">
-          Visits
-        </h2>
-        <p className="mt-1 max-w-xl text-sm">
-          A refresh counts again. Each browser is one person. A name shows when they signed up on that phone.
-        </p>
-      </div>
-      <ul className="grid list-none grid-cols-1 gap-3 sm:grid-cols-3">
-        {report.pages.map((page) => (
-          <li key={page.id} className="rounded-2xl bg-white px-4 py-4 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-            <p className="text-sm font-bold tracking-wide text-[#274b3a]/70 uppercase">{page.label}</p>
-            <p className="mt-2 font-heading text-4xl leading-none">{page.visitors}</p>
-            <p className="mt-1 text-sm">{page.visitors === 1 ? "unique person" : "unique people"}</p>
-            <p className="mt-2 text-sm font-semibold">{page.visits === 1 ? "1 visit" : `${page.visits} visits`}</p>
-          </li>
-        ))}
-      </ul>
-      <ul className="grid list-none grid-cols-1 gap-3 sm:grid-cols-3">
-        {report.clicks.map((click) => (
-          <li key={click.id} className="rounded-2xl bg-white px-4 py-4 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
-            <p className="text-sm font-bold tracking-wide text-[#274b3a]/70 uppercase">{click.label}</p>
-            <p className="mt-2 font-heading text-4xl leading-none">{click.count}</p>
-            <p className="mt-1 text-sm">{click.count === 1 ? "tap" : "taps"}</p>
-          </li>
-        ))}
-      </ul>
-      {report.recent.length === 0 ? <p className="text-sm">No visits yet.</p> : null}
-      {report.recent.length > 0 ? (
-        <ul className="grid list-none grid-cols-1 gap-2 lg:grid-cols-2">
-          {report.recent.map((visit) => (
-            <li key={visit.id} className="flex items-baseline justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm">
-              <span>
-                <span className="font-semibold">{visit.personName ?? "No name yet"}</span>
-                <span className="text-[#274b3a]/70"> · {visit.label}</span>
-              </span>
-              <time dateTime={visit.at} className="shrink-0 text-[#274b3a]/60">
-                {visitWhen(visit.at)}
-              </time>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
-function visitWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", {
-    timeZone: "America/Toronto",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function PeopleList({ people }: { people: PersonRecord[] }) {

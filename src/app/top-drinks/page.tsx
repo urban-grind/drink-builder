@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 
 export default async function TopDrinksPage() {
   if (!drinkStatsEnabled()) notFound();
-  const stats = rankDrinkSales(await loadDrinkSales());
-  return <TopDrinks stats={stats} />;
+  const board = await loadDrinkSales();
+  const stats = rankDrinkSales(board.sales);
+  return <TopDrinks stats={stats} updatedAt={board.updatedAt} />;
 }

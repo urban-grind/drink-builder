@@ -34,12 +34,15 @@ export function comingSoonAllowsReview(pathname: string, reviewer: boolean): boo
     pathname === "/photos/review" ||
     pathname === "/photos/review/" ||
     pathname === "/photos/recap" ||
-    pathname === "/photos/recap/"
+    pathname === "/photos/recap/" ||
+    pathname === "/photos/analytics" ||
+    pathname === "/photos/analytics/"
   ) {
     return true;
   }
   if (
     pathname === "/api/photos/review" ||
+    pathname === "/api/photos/analytics" ||
     pathname === "/api/photos/review/login" ||
     pathname === "/api/photos/review/logout" ||
     pathname === "/api/photos/review/race"

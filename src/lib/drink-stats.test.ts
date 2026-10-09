@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
-import { DRINK_BOARD_SIZE, drinkShareLabel, drinkStatsEnabled, drinkStatsRangeStart, rankDrinkSales, type DrinkSale } from "@/lib/drink-stats";
+import { DRINK_BOARD_SIZE, drinkShareLabel, drinkStatsEnabled, drinkStatsRangeStart, drinkUpdatedLabel, rankDrinkSales, type DrinkSale } from "@/lib/drink-stats";
 
 const FLAG = "DRINK_STATS";
 const previous = process.env[FLAG];
@@ -9,6 +9,15 @@ describe("drink stats", () => {
   after(() => {
     if (previous === undefined) delete process.env[FLAG];
     else process.env[FLAG] = previous;
+  });
+
+  it("says how long ago the café list was pulled", () => {
+    const now = Date.parse("2026-10-09T16:00:00.000Z");
+    assert.equal(drinkUpdatedLabel(now - 20_000, now), "Updated just now");
+    assert.equal(drinkUpdatedLabel(now - 60_000, now), "Updated 1 minute ago");
+    assert.equal(drinkUpdatedLabel(now - 6 * 60_000, now), "Updated 6 minutes ago");
+    assert.equal(drinkUpdatedLabel(now - 60 * 60_000, now), "Updated 1 hour ago");
+    assert.equal(drinkUpdatedLabel(now - 3 * 60 * 60_000, now), "Updated 3 hours ago");
   });
 
   it("stays hidden unless the switch is on", () => {
@@ -52,8 +61,104 @@ describe("drink stats", () => {
       ["Cider", 5, 22, null],
       ["Mocha", 4, 17, null],
     ]);
-    assert.equal(drinkStatsRangeStart(now), "2026-10-01T04:00:00.000Z");
-    assert.equal(drinkStatsRangeStart(new Date("2026-10-01T15:00:00.000Z")), "2026-09-28T04:00:00.000Z");
+    assert.equal(drinkStatsRangeStart(now), "2026-08-01T04:00:00.000Z");
+    assert.equal(drinkStatsRangeStart(new Date("2026-10-01T15:00:00.000Z")), "2026-08-01T04:00:00.000Z");
+    assert.equal(drinkStatsRangeStart(new Date("2026-01-15T17:00:00.000Z")), "2025-11-01T04:00:00.000Z");
+  });
+
+  it("compares today with yesterday up to the same time", () => {
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    const sales: DrinkSale[] = [
+      { name: "Salty Blonde", quantity: 6, soldAt: "2026-10-09T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 3, soldAt: "2026-10-09T15:00:00.000Z" },
+      { name: "Mocha", quantity: 1, soldAt: "2026-10-09T14:00:00.000Z" },
+      { name: "Cortado", quantity: 1, soldAt: "2026-10-09T14:30:00.000Z" },
+      { name: "Tiramisu", quantity: 5, soldAt: "2026-10-08T16:00:00.000Z" },
+      { name: "Mocha", quantity: 4, soldAt: "2026-10-08T15:00:00.000Z" },
+      { name: "Latte", quantity: 2, soldAt: "2026-10-08T14:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 1, soldAt: "2026-10-08T13:00:00.000Z" },
+      { name: "Afternoon", quantity: 100, soldAt: "2026-10-08T20:00:00.000Z" },
+    ];
+    const day = rankDrinkSales(sales, now).day;
+    assert.deepEqual(day.find((drink) => drink.name === "Salty Blonde")?.badges, [{ tone: "up", label: "↑ 3 spots" }]);
+    assert.deepEqual(day.find((drink) => drink.name === "Tiramisu")?.badges, []);
+    assert.deepEqual(day.find((drink) => drink.name === "Cortado")?.badges, [{ tone: "new", label: "New to 3rd place" }]);
+    assert.deepEqual(day.find((drink) => drink.name === "Mocha")?.badges, []);
+  });
+
+  it("compares equal weeks and months", () => {
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    const sales: DrinkSale[] = [
+      { name: "Salty Blonde", quantity: 6, soldAt: "2026-10-09T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 3, soldAt: "2026-10-09T15:00:00.000Z" },
+      { name: "Tiramisu", quantity: 10, soldAt: "2026-10-07T16:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 20, soldAt: "2026-10-02T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 8, soldAt: "2026-09-30T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 8, soldAt: "2026-09-03T16:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 3, soldAt: "2026-09-04T16:00:00.000Z" },
+    ];
+    const ranked = rankDrinkSales(sales, now);
+    assert.deepEqual(ranked.day.find((drink) => drink.name === "Salty Blonde")?.badges, []);
+    assert.deepEqual(ranked.week.find((drink) => drink.name === "Tiramisu")?.badges, []);
+    assert.deepEqual(ranked.week.find((drink) => drink.name === "Salty Blonde")?.badges, []);
+    assert.deepEqual(ranked.month.find((drink) => drink.name === "Salty Blonde")?.badges, []);
+    assert.deepEqual(ranked.month.find((drink) => drink.name === "Tiramisu")?.badges, []);
+  });
+
+  it("marks a drink that has held the weekly top spot", () => {
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    const sales: DrinkSale[] = [
+      { name: "Tiramisu", quantity: 10, soldAt: "2026-10-07T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 1, soldAt: "2026-10-09T15:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 4, soldAt: "2026-10-09T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 9, soldAt: "2026-09-30T16:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 2, soldAt: "2026-10-01T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 8, soldAt: "2026-09-23T16:00:00.000Z" },
+      { name: "Latte", quantity: 12, soldAt: "2026-09-16T16:00:00.000Z" },
+    ];
+    const ranked = rankDrinkSales(sales, now);
+    assert.deepEqual(ranked.week[0]?.badges, [{ tone: "streak", label: "3 weeks running" }]);
+    assert.deepEqual(ranked.month[0]?.badges, [{ tone: "streak", label: "2 months running" }]);
+    assert.deepEqual(ranked.day.find((drink) => drink.name === "Tiramisu")?.badges, []);
+  });
+
+  it("marks a drink that has led the last few days", () => {
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    const sales: DrinkSale[] = [
+      { name: "Salty Blonde", quantity: 6, soldAt: "2026-10-09T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 2, soldAt: "2026-10-09T15:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 5, soldAt: "2026-10-08T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 3, soldAt: "2026-10-08T15:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 4, soldAt: "2026-10-07T16:00:00.000Z" },
+      { name: "Mocha", quantity: 1, soldAt: "2026-10-07T15:00:00.000Z" },
+      { name: "Tiramisu", quantity: 9, soldAt: "2026-10-06T16:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 1, soldAt: "2026-10-06T15:00:00.000Z" },
+    ];
+    const ranked = rankDrinkSales(sales, now);
+    assert.deepEqual(ranked.day[0]?.badges, [{ tone: "streak", label: "3 days running" }]);
+    assert.deepEqual(ranked.week[0]?.badges, []);
+    assert.deepEqual(ranked.month[0]?.badges, []);
+  });
+
+  it("marks a drink that has led the last few months", () => {
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    const sales: DrinkSale[] = [
+      { name: "Salty Blonde", quantity: 10, soldAt: "2026-10-09T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 4, soldAt: "2026-10-09T15:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 20, soldAt: "2026-09-15T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 5, soldAt: "2026-09-15T15:00:00.000Z" },
+      { name: "Salty Blonde", quantity: 15, soldAt: "2026-08-15T16:00:00.000Z" },
+      { name: "Tiramisu", quantity: 9, soldAt: "2026-08-15T15:00:00.000Z" },
+      { name: "Tiramisu", quantity: 30, soldAt: "2026-07-15T16:00:00.000Z" },
+    ];
+    const month = rankDrinkSales(sales, now).month;
+    assert.deepEqual(month[0]?.badges, [{ tone: "streak", label: "3 months running" }]);
+  });
+
+  it("stays quiet when the earlier period has no sales", () => {
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    const ranked = rankDrinkSales([{ name: "Latte", quantity: 2, soldAt: "2026-10-09T16:00:00.000Z" }], now);
+    assert.deepEqual(ranked.day[0]?.badges, []);
   });
 
   it("keeps the top 10 and measures each share against every drink sold", () => {

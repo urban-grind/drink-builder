@@ -13,6 +13,11 @@ export type DrinkSale = {
   orderUrl?: string;
 };
 
+export type DrinkBadge = {
+  tone: "up" | "new" | "streak";
+  label: string;
+};
+
 export type DrinkTotal = {
   name: string;
   quantity: number;
@@ -21,6 +26,8 @@ export type DrinkTotal = {
   imageUrl: string | null;
   description: string | null;
   orderUrl: string | null;
+  /** Rank change against the same stretch of time before, plus a weekly winning streak. */
+  badges: DrinkBadge[];
 };
 
 export type DrinkStats = {
@@ -43,23 +50,32 @@ export function drinkStatsEnabled(): boolean {
 }
 
 /**
- * Sales the rankings are built from. Square is polled every 10 minutes.
- * The pull starts at `drinkStatsRangeStart` so a week that begins last month is included.
+ * Sales the rankings are built from. Square is polled every 30 minutes.
+ * The pull starts at the previous month so each list can be compared with the same stretch of time before it.
  */
-export async function loadDrinkSales(now = new Date()): Promise<DrinkSale[]> {
-  if (!drinkStatsEnabled()) return [];
-  const { loadCachedSquareSales, startSquarePoll } = await import("@/lib/square-drinks");
+export async function loadDrinkSales(now = new Date()): Promise<{ sales: DrinkSale[]; updatedAt: number | null }> {
+  if (!drinkStatsEnabled()) return { sales: [], updatedAt: null };
+  const { loadCachedSquareSales, squareSalesUpdatedAt, startSquarePoll } = await import("@/lib/square-drinks");
   startSquarePoll(() => drinkStatsRangeStart());
-  return loadCachedSquareSales(drinkStatsRangeStart(now));
+  const sales = await loadCachedSquareSales(drinkStatsRangeStart(now));
+  return { sales, updatedAt: squareSalesUpdatedAt() };
 }
 
-/** Earliest Eastern midnight the day, week, and month boards can need. */
+/** How long ago the café list was pulled, without a sales count. */
+export function drinkUpdatedLabel(updatedAt: number, now: number): string {
+  const minutes = Math.max(0, Math.floor((now - updatedAt) / 60_000));
+  if (minutes < 1) return "Updated just now";
+  if (minutes === 1) return "Updated 1 minute ago";
+  if (minutes < 60) return `Updated ${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours === 1) return "Updated 1 hour ago";
+  return `Updated ${hours} hours ago`;
+}
+
+/** Eastern midnight on the 1st, two months back, so a three-month run is inside the pull. */
 export function drinkStatsRangeStart(now = new Date()): string {
   const date = easternDate(now);
-  const week = shiftDays(date, -daysFromMonday(now));
-  const month = { year: date.year, month: date.month, day: 1 };
-  const start = earlier(easternMidnight(week), easternMidnight(month));
-  return start.toISOString();
+  return easternAt(shiftMonths(date, -2)).toISOString();
 }
 
 export function rankDrinkSales(sales: readonly DrinkSale[], now = new Date()): DrinkStats {
@@ -69,12 +85,14 @@ export function rankDrinkSales(sales: readonly DrinkSale[], now = new Date()): D
     if (!name || !Number.isFinite(sale.quantity) || sale.quantity === 0 || Number.isNaN(soldAt.getTime())) return [];
     return [{ name, key: name.toLocaleLowerCase(), quantity: sale.quantity, soldAt, imageUrl: sale.imageUrl, description: sale.description, orderUrl: sale.orderUrl }];
   });
+  const dayRows = rows.filter((row) => sameDay(row.soldAt, now));
+  const weekRows = rows.filter((row) => sameWeek(row.soldAt, now));
   const monthRows = rows.filter((row) => sameMonth(row.soldAt, now));
   return {
     drinks: board(rows),
-    day: board(rows.filter((row) => sameDay(row.soldAt, now))),
-    week: board(rows.filter((row) => sameWeek(row.soldAt, now))),
-    month: board(monthRows),
+    day: withMovement(board(dayRows), dayRows, rows.filter((row) => inYesterdaySoFar(row.soldAt, now)), runningStreak(rows, now, "day")),
+    week: withMovement(board(weekRows), weekRows, rows.filter((row) => inPreviousWeekSoFar(row.soldAt, now)), runningStreak(rows, now, "week")),
+    month: withMovement(board(monthRows), monthRows, rows.filter((row) => inPreviousMonthSoFar(row.soldAt, now)), runningStreak(rows, now, "month")),
   };
 }
 
@@ -119,7 +137,7 @@ function totals(rows: SaleRow[]): DrinkTotal[] {
     }
   }
   return [...grouped.values()]
-    .map((row) => ({ name: row.name, quantity: row.quantity, share: 0, imageUrl: row.imageUrl, description: row.description, orderUrl: row.orderUrl }))
+    .map((row) => ({ name: row.name, quantity: row.quantity, share: 0, imageUrl: row.imageUrl, description: row.description, orderUrl: row.orderUrl, badges: [] }))
     .filter((row) => row.quantity > 0)
     .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
 }
@@ -166,8 +184,8 @@ function shiftDays(date: EasternDate, days: number): EasternDate {
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
 }
 
-function easternMidnight(date: EasternDate): Date {
-  const guess = new Date(Date.UTC(date.year, date.month - 1, date.day));
+function easternAt(date: EasternDate, hour = 0, minute = 0, second = 0): Date {
+  const guess = new Date(Date.UTC(date.year, date.month - 1, date.day, hour, minute, second));
   return new Date(guess.getTime() - easternOffsetMs(guess));
 }
 
@@ -189,6 +207,146 @@ function easternOffsetMs(instant: Date): number {
   return asUtc - instant.getTime();
 }
 
-function earlier(left: Date, right: Date): Date {
-  return left < right ? left : right;
+type TimedRow = SaleRow & { soldAt: Date };
+type RunUnit = "day" | "week" | "month";
+type Run = { key: string; count: number; unit: RunUnit };
+
+function withMovement(current: DrinkTotal[], currentRows: TimedRow[], previousRows: TimedRow[], run: Run | null): DrinkTotal[] {
+  const previousHadSales = previousRows.some((row) => row.quantity > 0);
+  const previousTop = new Set(board(previousRows).map((drink) => drink.name.toLocaleLowerCase()));
+  const currentRanks = competitionRanks(currentRows);
+  const previousRanks = competitionRanks(previousRows);
+  return current.map((drink) => {
+    const key = drink.name.toLocaleLowerCase();
+    const badges: DrinkBadge[] = [];
+    const move = previousHadSales ? spotBadge(currentRanks.get(key), previousRanks.get(key), previousTop.has(key)) : null;
+    if (move) badges.push(move);
+    const streak = streakBadge(run, key);
+    if (streak) badges.push(streak);
+    return { ...drink, badges };
+  });
+}
+
+/** How long the current leader of this list has held first. Earlier days, weeks, and months count in full. */
+function runningStreak(rows: TimedRow[], now: Date, unit: RunUnit): Run | null {
+  const limit = unit === "day" ? 100 : unit === "week" ? 16 : 6;
+  let key: string | null = null;
+  let count = 0;
+  for (let back = 0; back < limit; back += 1) {
+    const when = shiftUnit(now, unit, -back);
+    const leader = board(rows.filter((row) => inUnit(row.soldAt, when, unit)))[0];
+    if (!leader) break;
+    const leaderKey = leader.name.toLocaleLowerCase();
+    if (key != null && leaderKey !== key) break;
+    key = leaderKey;
+    count += 1;
+  }
+  if (!key || count < 2) return null;
+  return { key, count, unit };
+}
+
+function streakBadge(run: Run | null, key: string): DrinkBadge | null {
+  if (!run || run.key !== key) return null;
+  const noun = run.unit === "day" ? "days" : run.unit === "week" ? "weeks" : "months";
+  return { tone: "streak", label: `${run.count} ${noun} running` };
+}
+
+function shiftUnit(now: Date, unit: RunUnit, steps: number): Date {
+  if (unit === "month") return easternAt(shiftMonths(easternDate(now), steps));
+  return shiftEasternDays(now, unit === "week" ? steps * 7 : steps);
+}
+
+function inUnit(sale: Date, when: Date, unit: RunUnit): boolean {
+  if (unit === "day") return sameDay(sale, when);
+  if (unit === "week") return sameWeek(sale, when);
+  return sameMonth(sale, when);
+}
+
+function shiftMonths(date: EasternDate, months: number): EasternDate {
+  const index = date.year * 12 + (date.month - 1) + months;
+  return { year: Math.floor(index / 12), month: ((index % 12) + 12) % 12 + 1, day: 1 };
+}
+
+function competitionRanks(rows: TimedRow[]): Map<string, number> {
+  const ranked = totals(rows);
+  const ranks = new Map<string, number>();
+  let rank = 0;
+  let lastQuantity = Number.POSITIVE_INFINITY;
+  ranked.forEach((drink, index) => {
+    if (drink.quantity !== lastQuantity) {
+      rank = index + 1;
+      lastQuantity = drink.quantity;
+    }
+    ranks.set(drink.name.toLocaleLowerCase(), rank);
+  });
+  return ranks;
+}
+
+function placeName(rank: number): string {
+  const mod10 = rank % 10;
+  const mod100 = rank % 100;
+  const suffix = mod100 >= 11 && mod100 <= 13 ? "th" : mod10 === 1 ? "st" : mod10 === 2 ? "nd" : mod10 === 3 ? "rd" : "th";
+  return `${rank}${suffix} place`;
+}
+
+function spotBadge(current: number | undefined, previous: number | undefined, onPreviousBoard: boolean): DrinkBadge | null {
+  if (current == null || !onPreviousBoard || previous == null) return { tone: "new", label: current == null ? "New to the top 10" : `New to ${placeName(current)}` };
+  const delta = previous - current;
+  if (delta < 2) return null;
+  return { tone: "up", label: `↑ ${delta} spots` };
+}
+
+function inYesterdaySoFar(sale: Date, now: Date): boolean {
+  return dateKey(easternDate(sale)) === dateKey(shiftDays(easternDate(now), -1)) && clockAtOrBefore(sale, now);
+}
+
+function inPreviousWeekSoFar(sale: Date, now: Date): boolean {
+  const then = shiftEasternDays(now, -7);
+  return sameWeek(sale, then) && sale.getTime() <= then.getTime();
+}
+
+function inPreviousMonthSoFar(sale: Date, now: Date): boolean {
+  const today = easternDate(now);
+  const previous = today.month === 1 ? { year: today.year - 1, month: 12 } : { year: today.year, month: today.month - 1 };
+  const sold = easternDate(sale);
+  if (sold.year !== previous.year || sold.month !== previous.month) return false;
+  const capDay = Math.min(today.day, daysInMonth(previous.year, previous.month));
+  if (sold.day < capDay) return true;
+  if (sold.day > capDay) return false;
+  return clockAtOrBefore(sale, now);
+}
+
+function clockAtOrBefore(sale: Date, now: Date): boolean {
+  return clockSeconds(sale) <= clockSeconds(now);
+}
+
+function clockSeconds(instant: Date): number {
+  const clock = easternClock(instant);
+  return clock.hour * 3600 + clock.minute * 60 + clock.second;
+}
+
+function shiftEasternDays(instant: Date, days: number): Date {
+  const clock = easternClock(instant);
+  return easternAt(shiftDays(clock, days), clock.hour, clock.minute, clock.second);
+}
+
+function easternClock(instant: Date): EasternDate & { hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  let hour = pick("hour");
+  if (hour === 24) hour = 0;
+  return { year: pick("year"), month: pick("month"), day: pick("day"), hour, minute: pick("minute"), second: pick("second") };
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
