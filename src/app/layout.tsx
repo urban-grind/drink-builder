@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/app-frame";
+import { PourPause } from "@/components/pour-pause";
 import { UploadDialogProvider } from "@/components/upload-dialog";
 import "./globals.css";
 
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </a>
         <UploadDialogProvider>
           <AppFrame>{children}</AppFrame>
+          <PourPause />
         </UploadDialogProvider>
       </body>
     </html>

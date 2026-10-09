@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { requestPour } from "@/components/pour-pause";
 import type { DrinkStats, DrinkTotal } from "@/lib/drink-stats";
 
 const TABS = [
@@ -27,6 +28,13 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
     setSelected({ drink, origin: readOrigin(source) });
   }
 
+  function chooseTab(key: (typeof TABS)[number][0]) {
+    if (key === tab) return;
+    setSelected(null);
+    setTab(key);
+    requestPour();
+  }
+
   return (
     <div className="mx-auto w-full max-w-3xl pb-10">
       <div role="tablist" aria-label="Drink rankings" className="flex flex-wrap items-center gap-1">
@@ -38,10 +46,7 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => {
-                setTab(key);
-                setSelected(null);
-              }}
+              onClick={() => chooseTab(key)}
               className={
                 active
                   ? "rounded-full bg-[#274b3a] px-5 py-2.5 text-sm font-semibold text-[#f7f4ec]"
@@ -58,15 +63,15 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
 
       {drinks.length === 0 ? <p className="mt-4 text-sm text-[#274b3a]/70">No drinks yet.</p> : null}
 
-      {featured.length > 0 ? (
+      {featured.length === 0 ? null : (
         <div className={`mt-4 grid gap-3 ${featured.length === 1 ? "grid-cols-1" : featured.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
           {featured.map((drink, index) => (
             <DrinkCard key={drink.name} drink={drink} rank={index + 1} onOpen={openDrink} />
           ))}
         </div>
-      ) : null}
+      )}
 
-      {rest.length > 0 ? (
+      {rest.length === 0 ? null : (
         <ol className="mt-2" start={FEATURED + 1}>
           {rest.map((drink, index) => (
             <li key={drink.name} className="border-t border-[#274b3a]/12">
@@ -78,15 +83,26 @@ export function TopDrinks({ stats }: { stats: DrinkStats }) {
               >
                 <span className="w-6 shrink-0 font-normal text-[#7d9488]">{index + FEATURED + 1}</span>
                 <DrinkPhoto imageUrl={drink.imageUrl} />
-                <span className="min-w-0 flex-1 leading-tight">{drink.name}</span>
+                <DrinkName name={drink.name} className="min-w-0 flex-1 leading-tight" />
               </button>
             </li>
           ))}
         </ol>
-      ) : null}
+      )}
 
       <DrinkDetail drink={selected?.drink ?? null} origin={selected?.origin ?? null} onClose={() => setSelected(null)} />
     </div>
+  );
+}
+
+function DrinkName({ name, className }: { name: string; className: string }) {
+  return (
+    <span className={className}>
+      {name}{" "}
+      <span aria-hidden="true" className="inline-block translate-y-[0.12em]">
+        →
+      </span>
+    </span>
   );
 }
 
@@ -100,7 +116,7 @@ function DrinkCard({ drink, rank, onOpen }: { drink: DrinkTotal; rank: number; o
     >
       <DrinkPhoto imageUrl={drink.imageUrl} large />
       <span className="text-sm font-normal text-[#7d9488]">{rank}</span>
-      <span className="text-sm leading-tight text-pretty">{drink.name}</span>
+      <DrinkName name={drink.name} className="text-sm leading-tight text-pretty" />
     </button>
   );
 }
@@ -231,14 +247,24 @@ function DrinkDetail({ drink, origin, onClose }: { drink: DrinkTotal | null; ori
               data-close
               data-reveal
               onClick={startClose}
-              className="absolute top-3 right-3 z-10 rounded-full px-4 py-2 text-sm"
+              className="absolute top-3 right-3 z-10 grid h-11 w-11 place-items-center rounded-full text-xl leading-none"
               aria-label="Close"
             >
-              Close
+              ×
             </button>
             <div data-reveal className="px-5 pt-4 pb-5">
               <h2 className="font-heading text-3xl leading-tight">{drink.name}</h2>
               <p className="mt-3 text-base leading-relaxed whitespace-pre-line">{drink.description ?? "No description yet."}</p>
+              {drink.orderUrl ? (
+                <a
+                  href={drink.orderUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-5 inline-flex h-11 items-center rounded-full bg-[#274b3a] px-5 text-sm font-bold text-white"
+                >
+                  Order
+                </a>
+              ) : null}
             </div>
           </>
         ) : null}

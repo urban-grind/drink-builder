@@ -12,8 +12,115 @@ export type RaceVote = {
   at: string;
 };
 
-/** Entries opened Wednesday, October 7, 2026 at 12:00 a.m. Eastern Time. */
-export const CONTEST_OPENS_AT = Date.parse("2026-10-07T00:00:00-04:00");
+/** Recap starts Wednesday, October 7, 2026 at 7:00 p.m. Eastern Time. */
+export const CONTEST_OPENS_AT = Date.parse("2026-10-07T19:00:00-04:00");
+
+/** The on-screen clock sits on the hour. Playback still uses the exact second. */
+export function displayHour(atMs: number): number {
+  return Math.floor(atMs / 3_600_000) * 3_600_000;
+}
+
+const EASTERN = "America/Toronto";
+const QUIET_START_HOUR = 23;
+const AWAKE_START_HOUR = 5;
+
+function easternClock(atMs: number): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(atMs));
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const hour = value("hour");
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: hour === 24 ? 0 : hour,
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+function easternOffset(atMs: number): number {
+  const clock = easternClock(atMs);
+  const wall = Date.UTC(clock.year, clock.month - 1, clock.day, clock.hour, clock.minute, clock.second);
+  return wall - Math.floor(atMs / 1000) * 1000;
+}
+
+function atEasternHour(year: number, month: number, day: number, hour: number): number {
+  const guess = Date.UTC(year, month - 1, day, hour);
+  const corrected = guess - easternOffset(guess);
+  return guess - easternOffset(corrected);
+}
+
+function shiftDay(year: number, month: number, day: number, days: number): { year: number; month: number; day: number } {
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() };
+}
+
+function isQuietHour(atMs: number): boolean {
+  const hour = easternClock(atMs).hour;
+  return hour >= QUIET_START_HOUR || hour < AWAKE_START_HOUR;
+}
+
+function nextQuietStart(atMs: number): number {
+  const clock = easternClock(atMs);
+  if (clock.hour < QUIET_START_HOUR) return atEasternHour(clock.year, clock.month, clock.day, QUIET_START_HOUR);
+  const next = shiftDay(clock.year, clock.month, clock.day, 1);
+  return atEasternHour(next.year, next.month, next.day, QUIET_START_HOUR);
+}
+
+function nextAwakeStart(atMs: number): number {
+  const clock = easternClock(atMs);
+  if (clock.hour < AWAKE_START_HOUR) return atEasternHour(clock.year, clock.month, clock.day, AWAKE_START_HOUR);
+  const next = shiftDay(clock.year, clock.month, clock.day, 1);
+  return atEasternHour(next.year, next.month, next.day, AWAKE_START_HOUR);
+}
+
+/** Open hours between two instants. Each night from 11:00 p.m. to 5:00 a.m. Eastern is left out. */
+export function awakeSegments(fromMs: number, toMs: number): { start: number; end: number }[] {
+  if (toMs <= fromMs) return [];
+  const segments: { start: number; end: number }[] = [];
+  let cursor = fromMs;
+  for (let guard = 0; guard < 400 && cursor < toMs; guard += 1) {
+    if (isQuietHour(cursor)) {
+      const wake = nextAwakeStart(cursor);
+      if (wake <= cursor) break;
+      cursor = wake;
+      continue;
+    }
+    const end = Math.min(toMs, nextQuietStart(cursor));
+    if (end <= cursor) break;
+    segments.push({ start: cursor, end });
+    cursor = end;
+  }
+  return segments;
+}
+
+export function awakeDuration(fromMs: number, toMs: number): number {
+  return awakeSegments(fromMs, toMs).reduce((sum, segment) => sum + (segment.end - segment.start), 0);
+}
+
+/** Playback time across open hours. Crossing 11:00 p.m. lands on 5:00 a.m., still on the exact second. */
+export function playheadAt(fromMs: number, toMs: number, progress: number): number {
+  if (toMs <= fromMs || progress <= 0) return fromMs;
+  if (progress >= 1) return toMs;
+  const total = awakeDuration(fromMs, toMs);
+  if (total <= 0) return fromMs;
+  let remain = progress * total;
+  for (const segment of awakeSegments(fromMs, toMs)) {
+    const length = segment.end - segment.start;
+    if (remain < length) return segment.start + remain;
+    remain -= length;
+  }
+  return toMs;
+}
 
 export type VoteRace = {
   photos: RacePhoto[];

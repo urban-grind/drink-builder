@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ApiRequestError, requestJson } from "@/lib/client-api";
-import { RACE_SIZE, follow, momentAt, standingsAt, type RacePhoto, type VoteRace } from "@/lib/photo-race";
+import { RACE_SIZE, awakeDuration, displayHour, follow, momentAt, playheadAt, standingsAt, type RacePhoto, type VoteRace } from "@/lib/photo-race";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,12 +18,10 @@ const clock = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   hour: "numeric",
-  minute: "2-digit",
-  second: "2-digit",
 });
 
 function playbackMs(from: number, to: number): number {
-  const hours = Math.max(1, (to - from) / 3_600_000);
+  const hours = Math.max(1, awakeDuration(from, to) / 3_600_000);
   return Math.min(48000, Math.max(16000, hours * 1100));
 }
 
@@ -49,13 +47,13 @@ export function PhotoRace() {
   votesRef.current = race?.votes ?? [];
   boundsRef.current = { from: fromMs, to: toMs };
 
-  const atMs = fromMs + Math.max(0, toMs - fromMs) * progress;
+  const atMs = playheadAt(fromMs, toMs, progress);
   const byId = useMemo(() => new Map((race?.photos ?? []).map((photo) => [photo.id, photo])), [race]);
   const finish = useMemo(() => (race ? (standingsAt(race.votes, Date.parse(race.to))[0]?.votes ?? 1) : 1), [race]);
 
   function paint(snap: boolean, dt: number) {
     const bounds = boundsRef.current;
-    const at = bounds.from + Math.max(0, bounds.to - bounds.from) * progressRef.current;
+    const at = playheadAt(bounds.from, bounds.to, progressRef.current);
     const target = momentAt(votesRef.current, at);
     const map = shownRef.current;
     const ids = new Set(target.rows.map((row) => row.id));
@@ -215,7 +213,7 @@ export function PhotoRace() {
   return (
     <section aria-labelledby="daily-recap" className="rounded-2xl bg-white p-4 shadow-[0_16px_40px_rgb(39_75_58/0.06)]">
       <p className="text-sm font-semibold tabular-nums" aria-live="polite">
-        {race ? clock.format(atMs) : "Eastern time"}
+        {race ? clock.format(displayHour(atMs)) : "Eastern time"}
       </p>
       {error ? (
         <p role="alert" className="mt-4 text-sm text-destructive">

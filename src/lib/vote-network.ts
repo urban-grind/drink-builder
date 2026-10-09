@@ -1,12 +1,9 @@
 import { createHash } from "node:crypto";
 
-/** How many yes votes one network can add to a single photo. */
-export const NETWORK_VOTES_PER_PHOTO = 3;
+/** One yes vote per network, across every photo, inside this window. */
+export const NETWORK_VOTE_WINDOW_MS = 5 * 60 * 1000;
 
-/** Rolling window for that cap. */
-export const NETWORK_VOTE_WINDOW_MS = 10 * 60 * 1000;
-
-export const NETWORK_VOTE_LIMIT_MESSAGE = "This photo already has 3 votes from this location.";
+export const NETWORK_VOTE_LIMIT_MESSAGE = "This location can vote again in 5 minutes.";
 
 const HASH_PEPPER = "urban-grind-photo-network";
 

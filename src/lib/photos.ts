@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { beginImmediate, getDb, isUniqueConstraint, rollbackQuietly } from "@/lib/db";
 import { DRAW_REQUIRED_AT } from "@/lib/draw-prompt";
-import { NETWORK_VOTES_PER_PHOTO, networkVoteCutoff } from "@/lib/vote-network";
+import { networkVoteCutoff } from "@/lib/vote-network";
 import type { PhotoCrop } from "@/lib/photo-crop";
 import { discardUpload, prepareUpload, saveUploadCrop, UPLOAD_TTL_MS, voteKeyForUpload, thumbKeyForUpload } from "@/lib/photo-prepare";
 import { isPhotoCode, takePhotoCode } from "@/lib/photo-code";
@@ -352,20 +352,15 @@ export function listPhotoDeck(
   return dealt.slice(0, limit).map((item) => toPublic(item.row));
 }
 
-function networkVoteLimitReached(
-  db: DatabaseSync,
-  photoId: string,
-  networkHash: string | null | undefined,
-  now: string,
-): boolean {
+function networkVoteLimitReached(db: DatabaseSync, networkHash: string | null | undefined, now: string): boolean {
   if (!networkHash) return false;
   const row = db
     .prepare(
       `SELECT COUNT(*) AS count FROM photo_votes
-       WHERE photo_id = ? AND network_hash = ? AND created_at > ?`,
+       WHERE network_hash = ? AND created_at > ?`,
     )
-    .get(photoId, networkHash, networkVoteCutoff(new Date(now))) as { count: number };
-  return Number(row.count) >= NETWORK_VOTES_PER_PHOTO;
+    .get(networkHash, networkVoteCutoff(new Date(now))) as { count: number };
+  return Number(row.count) >= 1;
 }
 
 export function swipeDeckPhoto(
@@ -409,7 +404,7 @@ export function swipeDeckPhoto(
     }
     const now = new Date().toISOString();
     if (action === "vote") {
-      if (networkVoteLimitReached(db, photoId, networkHash, now)) {
+      if (networkVoteLimitReached(db, networkHash, now)) {
         db.exec("ROLLBACK");
         return { ok: false, code: "NETWORK_LIMIT" };
       }
@@ -839,7 +834,7 @@ export function castPhotoVote(
       return { ok: false, code: "ALREADY_VOTED" };
     }
     const now = new Date().toISOString();
-    if (networkVoteLimitReached(db, photoId, networkHash, now)) {
+    if (networkVoteLimitReached(db, networkHash, now)) {
       db.exec("ROLLBACK");
       return { ok: false, code: "NETWORK_LIMIT" };
     }

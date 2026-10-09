@@ -8,7 +8,7 @@ function Blank({ children }: { children: ReactNode }) {
 export function ContestTerms() {
   return (
     <article className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-[80] border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 px-5 py-3.5">
           <Link href="/" className="shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -7,7 +7,7 @@ import { deliverPng, phoneSharesPng } from "@/lib/share-png";
 const STORY_URL = "/coming-soon/sip-snap-swipe.png?v=6";
 const STORY_FILE = "Urban-Grind-Story.png";
 
-export function WaysToWinDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function WaysToWinDialog({ open, onClose, onFaq }: { open: boolean; onClose: () => void; onFaq: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [left, setLeft] = useState<ContestTimeLeft | null>(null);
 
@@ -95,6 +95,13 @@ export function WaysToWinDialog({ open, onClose }: { open: boolean; onClose: () 
               action={<StoryButton />}
             />
           </div>
+          <button
+            type="button"
+            onClick={onFaq}
+            className="mt-4 h-11 w-full rounded-full border border-[#274b3a] bg-transparent text-sm font-bold text-[#274b3a]"
+          >
+            FAQs
+          </button>
         </div>
       </div>
     </dialog>

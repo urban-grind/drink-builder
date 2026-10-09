@@ -10,6 +10,7 @@ export type DrinkSale = {
   soldAt: string;
   imageUrl?: string;
   description?: string;
+  orderUrl?: string;
 };
 
 export type DrinkTotal = {
@@ -19,6 +20,7 @@ export type DrinkTotal = {
   share: number;
   imageUrl: string | null;
   description: string | null;
+  orderUrl: string | null;
 };
 
 export type DrinkStats = {
@@ -65,7 +67,7 @@ export function rankDrinkSales(sales: readonly DrinkSale[], now = new Date()): D
     const name = sale.name.trim();
     const soldAt = new Date(sale.soldAt);
     if (!name || !Number.isFinite(sale.quantity) || sale.quantity === 0 || Number.isNaN(soldAt.getTime())) return [];
-    return [{ name, key: name.toLocaleLowerCase(), quantity: sale.quantity, soldAt, imageUrl: sale.imageUrl, description: sale.description }];
+    return [{ name, key: name.toLocaleLowerCase(), quantity: sale.quantity, soldAt, imageUrl: sale.imageUrl, description: sale.description, orderUrl: sale.orderUrl }];
   });
   const monthRows = rows.filter((row) => sameMonth(row.soldAt, now));
   return {
@@ -91,30 +93,33 @@ function board(rows: SaleRow[]): DrinkTotal[] {
   }));
 }
 
-type SaleRow = { name: string; key: string; quantity: number; imageUrl?: string; description?: string };
+type SaleRow = { name: string; key: string; quantity: number; imageUrl?: string; description?: string; orderUrl?: string };
 
 function totals(rows: SaleRow[]): DrinkTotal[] {
-  const grouped = new Map<string, { name: string; nameQty: number; quantity: number; imageUrl: string | null; description: string | null }>();
+  const grouped = new Map<string, { name: string; nameQty: number; quantity: number; imageUrl: string | null; description: string | null; orderUrl: string | null }>();
   for (const row of rows) {
     const imageUrl = row.imageUrl || null;
     const description = row.description?.trim() || null;
+    const orderUrl = row.orderUrl || null;
     const current = grouped.get(row.key);
     if (!current) {
-      grouped.set(row.key, { name: row.name, nameQty: row.quantity, quantity: row.quantity, imageUrl, description });
+      grouped.set(row.key, { name: row.name, nameQty: row.quantity, quantity: row.quantity, imageUrl, description, orderUrl });
       continue;
     }
     current.quantity += row.quantity;
     if (!current.imageUrl && imageUrl) current.imageUrl = imageUrl;
     if (!current.description && description) current.description = description;
+    if (!current.orderUrl && orderUrl) current.orderUrl = orderUrl;
     if (row.quantity > current.nameQty) {
       current.name = row.name;
       current.nameQty = row.quantity;
       if (imageUrl) current.imageUrl = imageUrl;
       if (description) current.description = description;
+      if (orderUrl) current.orderUrl = orderUrl;
     }
   }
   return [...grouped.values()]
-    .map((row) => ({ name: row.name, quantity: row.quantity, share: 0, imageUrl: row.imageUrl, description: row.description }))
+    .map((row) => ({ name: row.name, quantity: row.quantity, share: 0, imageUrl: row.imageUrl, description: row.description, orderUrl: row.orderUrl }))
     .filter((row) => row.quantity > 0)
     .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
 }

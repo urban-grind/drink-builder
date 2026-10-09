@@ -10,16 +10,12 @@ import { castPhotoVote, swipeDeckPhoto, undoDeckSwipe } from "@/lib/photos";
 import {
   NETWORK_VOTE_LIMIT_MESSAGE,
   NETWORK_VOTE_WINDOW_MS,
-  NETWORK_VOTES_PER_PHOTO,
   clientNetworkAddress,
   hashNetwork,
 } from "@/lib/vote-network";
 
 const previousDb = process.env.DRINK_DB_PATH;
 process.env.DRINK_DB_PATH = path.join(os.tmpdir(), `urban-grind-network-${process.pid}.sqlite`);
-
-const cafe = hashNetwork("203.0.113.10");
-const cell = hashNetwork("198.51.100.20");
 
 function insertEntry() {
   const id = randomUUID();
@@ -62,89 +58,82 @@ describe("votes from one network", () => {
     else process.env.DRINK_DB_PATH = previousDb;
   });
 
-  it("allows three votes on a photo every ten minutes, then waits", () => {
+  it("allows one vote every five minutes from a network, on any photo", () => {
+    const here = hashNetwork(randomUUID());
+    const there = hashNetwork(randomUUID());
     const photoId = insertEntry();
-    for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
-      const saved = swipeDeckPhoto(photoId, randomUUID(), "vote", cafe);
-      assert.equal(saved.ok, true);
-    }
-    const blocked = swipeDeckPhoto(photoId, randomUUID(), "vote", cafe);
-    assert.equal(blocked.ok, false);
-    if (!blocked.ok) assert.equal(blocked.code, "NETWORK_LIMIT");
-    assert.equal(voteCount(photoId), NETWORK_VOTES_PER_PHOTO);
+    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", here).ok, true);
+    const samePhoto = swipeDeckPhoto(photoId, randomUUID(), "vote", here);
+    assert.equal(samePhoto.ok, false);
+    if (!samePhoto.ok) assert.equal(samePhoto.code, "NETWORK_LIMIT");
 
     const otherPhoto = insertEntry();
-    assert.equal(swipeDeckPhoto(otherPhoto, randomUUID(), "vote", cafe).ok, true);
-    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", cell).ok, true);
-    assert.equal(voteCount(photoId), NETWORK_VOTES_PER_PHOTO + 1);
+    const other = swipeDeckPhoto(otherPhoto, randomUUID(), "vote", here);
+    assert.equal(other.ok, false);
+    if (!other.ok) assert.equal(other.code, "NETWORK_LIMIT");
+
+    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", there).ok, true);
+    assert.equal(voteCount(photoId), 2);
   });
 
-  it("does not count a skip or a vote from outside the ten-minute window", () => {
+  it("does not count a skip or a vote from outside the five-minute window", () => {
+    const here = hashNetwork(randomUUID());
     const photoId = insertEntry();
-    for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
-      assert.equal(swipeDeckPhoto(photoId, randomUUID(), "skip", cafe).ok, true);
-    }
-    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", cafe).ok, true);
+    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "skip", here).ok, true);
+    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", here).ok, true);
 
+    const agedNetwork = hashNetwork(randomUUID());
     const aged = insertEntry();
     const old = new Date(Date.now() - NETWORK_VOTE_WINDOW_MS - 60_000).toISOString();
-    for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
-      const voterId = randomUUID();
-      getDb()
-        .prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at, network_hash) VALUES (?, ?, ?, ?)")
-        .run(aged, voterId, old, cafe);
-    }
-    assert.equal(swipeDeckPhoto(aged, randomUUID(), "vote", cafe).ok, true);
+    getDb()
+      .prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at, network_hash) VALUES (?, ?, ?, ?)")
+      .run(aged, randomUUID(), old, agedNetwork);
+    assert.equal(swipeDeckPhoto(aged, randomUUID(), "vote", agedNetwork).ok, true);
 
+    const recentNetwork = hashNetwork(randomUUID());
     const recent = new Date(Date.now() - NETWORK_VOTE_WINDOW_MS + 60_000).toISOString();
     const fresh = insertEntry();
-    for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
-      getDb()
-        .prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at, network_hash) VALUES (?, ?, ?, ?)")
-        .run(fresh, randomUUID(), recent, cafe);
-    }
-    const blocked = castPhotoVote(fresh, randomUUID(), cafe);
+    getDb()
+      .prepare("INSERT INTO photo_votes (photo_id, voter_id, created_at, network_hash) VALUES (?, ?, ?, ?)")
+      .run(fresh, randomUUID(), recent, recentNetwork);
+    const blocked = castPhotoVote(insertEntry(), randomUUID(), recentNetwork);
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.code, "NETWORK_LIMIT");
   });
 
   it("frees a slot when the latest swipe is undone and leaves a repeat vote alone", () => {
+    const here = hashNetwork(randomUUID());
     const photoId = insertEntry();
-    const voters = Array.from({ length: NETWORK_VOTES_PER_PHOTO }, () => randomUUID());
-    for (const voterId of voters) {
-      assert.equal(swipeDeckPhoto(photoId, voterId, "vote", cafe).ok, true);
-    }
-    const repeat = swipeDeckPhoto(photoId, voters[0]!, "vote", cafe);
+    const voterId = randomUUID();
+    assert.equal(swipeDeckPhoto(photoId, voterId, "vote", here).ok, true);
+    const repeat = swipeDeckPhoto(photoId, voterId, "vote", here);
     assert.equal(repeat.ok, false);
     if (!repeat.ok) assert.equal(repeat.code, "ALREADY_ACTED");
 
-    assert.equal(undoDeckSwipe(voters[NETWORK_VOTES_PER_PHOTO - 1]!, photoId).ok, true);
-    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", cafe).ok, true);
-    const blocked = castPhotoVote(photoId, randomUUID(), cafe);
+    assert.equal(undoDeckSwipe(voterId, photoId).ok, true);
+    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote", here).ok, true);
+    const blocked = castPhotoVote(insertEntry(), randomUUID(), here);
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.code, "NETWORK_LIMIT");
   });
 
   it("stays open when the request has no public address", () => {
     const photoId = insertEntry();
-    for (let index = 0; index < NETWORK_VOTES_PER_PHOTO + 1; index += 1) {
-      assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote").ok, true);
-    }
+    assert.equal(swipeDeckPhoto(photoId, randomUUID(), "vote").ok, true);
+    assert.equal(swipeDeckPhoto(insertEntry(), randomUUID(), "vote").ok, true);
   });
 
   it("answers the swipe and the photo page with the same wait", async () => {
     const photoId = insertEntry();
     const headers = { "content-type": "application/json", "x-forwarded-for": "9.9.9.9, 203.0.113.77" };
-    for (let index = 0; index < NETWORK_VOTES_PER_PHOTO; index += 1) {
-      const response = await deckPost(
-        new Request("http://local/api/photos/deck", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ voterId: randomUUID(), photoId, action: "vote" }),
-        }),
-      );
-      assert.equal(response.status, 200);
-    }
+    const response = await deckPost(
+      new Request("http://local/api/photos/deck", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ voterId: randomUUID(), photoId, action: "vote" }),
+      }),
+    );
+    assert.equal(response.status, 200);
     const blocked = await votePost(
       new Request(`http://local/api/photos/${photoId}/vote`, {
         method: "POST",

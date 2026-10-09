@@ -4,7 +4,7 @@ import { after, before, describe, it } from "node:test";
 import os from "node:os";
 import path from "node:path";
 import { getDb, resetDbForTests } from "@/lib/db";
-import { CONTEST_OPENS_AT, follow, momentAt, raceMoment, raceTicks, standingsAt } from "@/lib/photo-race";
+import { CONTEST_OPENS_AT, awakeDuration, displayHour, follow, momentAt, playheadAt, raceMoment, raceTicks, standingsAt } from "@/lib/photo-race";
 import { loadVoteRace } from "@/lib/photo-race-load";
 
 const previousDb = process.env.DRINK_DB_PATH;
@@ -148,15 +148,37 @@ describe("photo race", () => {
     assert.equal(race.from, new Date(CONTEST_OPENS_AT).toISOString());
   });
 
-  it("reads the board at the contest open and later the same day", () => {
+  it("starts at 7 p.m. Eastern and shows the hour while counting the exact second", () => {
+    assert.equal(new Date(CONTEST_OPENS_AT).toISOString(), "2026-10-07T23:00:00.000Z");
     const votes = [
-      { photoId: "a", at: "2026-10-07T05:00:00.000Z" },
+      { photoId: "a", at: "2026-10-07T23:30:12.000Z" },
       { photoId: "a", at: "2026-10-08T15:00:00.000Z" },
     ];
     const open = momentAt(votes, CONTEST_OPENS_AT);
     assert.equal(open.rows.length, 0);
-    assert.equal(open.atMs, CONTEST_OPENS_AT);
-    assert.equal(momentAt(votes, Date.parse("2026-10-07T06:00:00.000Z")).rows[0]?.votes, 1);
+    assert.equal(momentAt(votes, Date.parse("2026-10-07T23:30:12.000Z")).rows[0]?.votes, 1);
+    const during = Date.parse("2026-10-07T23:33:12.000Z");
+    assert.equal(displayHour(during), Date.parse("2026-10-07T23:00:00.000Z"));
+    assert.equal(displayHour(during + 27 * 60 * 1000), Date.parse("2026-10-08T00:00:00.000Z"));
     assert.equal(momentAt(votes, Date.parse("2026-10-08T16:00:00.000Z")).rows[0]?.votes, 2);
+  });
+
+  it("skips 11 p.m. to 5 a.m. Eastern and still counts that night at 5", () => {
+    const from = CONTEST_OPENS_AT;
+    const to = Date.parse("2026-10-08T20:00:00-04:00");
+    const eleven = Date.parse("2026-10-08T03:00:00.000Z");
+    const five = Date.parse("2026-10-08T09:00:00.000Z");
+    const awake = eleven - from + (to - five);
+    assert.equal(awakeDuration(from, to), awake);
+    assert.equal(playheadAt(from, to, 0), from);
+    assert.equal(playheadAt(from, to, (eleven - from) / awake), five);
+    const evening = playheadAt(from, to, (eleven - from - 30_000) / awake);
+    assert.ok(evening >= eleven - 30_000 && evening < eleven);
+    assert.equal(playheadAt(from, to, 90_000 / awake), from + 90_000);
+    assert.equal(playheadAt(from, to, 1), to);
+
+    const overnight = [{ photoId: "a", at: "2026-10-08T06:30:00.000Z" }];
+    assert.equal(momentAt(overnight, eleven).rows.length, 0);
+    assert.equal(momentAt(overnight, five).rows[0]?.votes, 1);
   });
 });

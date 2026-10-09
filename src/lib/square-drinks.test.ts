@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { allowedVariationIds, normalizeCategory, salesFromOrders, variationDescriptions, variationImageUrls } from "@/lib/square-drinks";
+import { allowedVariationIds, normalizeCategory, salesFromOrders, squareOrderUrl, variationDescriptions, variationImageUrls, variationOrderUrls } from "@/lib/square-drinks";
 import { rankDrinkSales } from "@/lib/drink-stats";
 
 describe("square drinks", () => {
@@ -75,6 +75,30 @@ describe("square drinks", () => {
     ]);
     assert.equal(descriptions.get("regular"), "Steamed milk and espresso.");
     assert.equal(descriptions.get("large"), "Steamed milk and espresso.");
+    assert.equal(
+      squareOrderUrl("L9NS4Q4Z6HMD6", "QXWUZI5QMWWS2EQ342YQ7254", "QTME2IIDRFJDTBMFASI2WC6C"),
+      "https://www.urbangrind.ca/s/order?location=L9NS4Q4Z6HMD6&item=QXWUZI5QMWWS2EQ342YQ7254#QTME2IIDRFJDTBMFASI2WC6C",
+    );
+    assert.equal(squareOrderUrl("not a location", "QXWUZI5QMWWS2EQ342YQ7254", "QTME2IIDRFJDTBMFASI2WC6C"), null);
+    const orderUrls = variationOrderUrls(
+      [
+        { type: "CATEGORY", id: "COFFEECAT", category_data: { name: "Coffee-Based Beverages" } },
+        {
+          type: "ITEM",
+          id: "LATTEITEM",
+          item_data: {
+            category_id: "COFFEECAT",
+            variations: [
+              { id: "regular", is_deleted: false },
+              { id: "large", is_deleted: false },
+            ],
+          },
+        },
+      ],
+      "L9NS4Q4Z6HMD6",
+    );
+    assert.equal(orderUrls.get("regular"), "https://www.urbangrind.ca/s/order?location=L9NS4Q4Z6HMD6&item=LATTEITEM#COFFEECAT");
+    assert.equal(orderUrls.get("large"), orderUrls.get("regular"));
   });
 
   it("counts each size toward the product and removes a return", () => {
@@ -99,6 +123,7 @@ describe("square drinks", () => {
       allowed,
       new Map([["large", "https://cdn.example/latte.jpg"]]),
       new Map([["large", "Our signature latte."]]),
+      new Map([["regular", "https://www.urbangrind.ca/s/order?location=L9NS4Q4Z6HMD6&item=LATTEITEM#COFFEECAT"]]),
     );
     const ranked = rankDrinkSales(sales, new Date("2026-10-08T19:00:00.000Z"));
     assert.equal(ranked.day[0]?.name, "Salty Blonde Latte");
@@ -106,5 +131,6 @@ describe("square drinks", () => {
     assert.equal(ranked.day[0]?.share, 100);
     assert.equal(ranked.day[0]?.imageUrl, "https://cdn.example/latte.jpg");
     assert.equal(ranked.day[0]?.description, "Our signature latte.");
+    assert.equal(ranked.day[0]?.orderUrl, "https://www.urbangrind.ca/s/order?location=L9NS4Q4Z6HMD6&item=LATTEITEM#COFFEECAT");
   });
 });

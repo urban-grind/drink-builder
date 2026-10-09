@@ -3,17 +3,34 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CafeLink } from "@/components/cafe-link";
+import { ContestHeader, EnterLink } from "@/components/contest-header";
 import { OpenUploadButton } from "@/components/upload-dialog";
 
 export function SiteHeader() {
-  const review = usePathname() === "/photos/review";
+  const pathname = usePathname();
+  if (pathname === "/top-drinks") {
+    return (
+      <ContestHeader
+        logo={
+          <Link href="/" className="shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/urban-grind-logo.png" alt="Urban Grind Coffee Co." className="h-11 w-auto" />
+          </Link>
+        }
+        action={<EnterLink />}
+      />
+    );
+  }
+
+  const review = pathname === "/photos/review";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#274b3a]/10 bg-[#f3f2ef]/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-[80] border-b border-[#274b3a]/10 bg-[#f3f2ef]/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 lg:px-8">
         <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-4">
-          <Link href="/" className="font-heading text-[1.7rem] leading-none tracking-tight text-[#274b3a] sm:text-3xl">
-            Urban Grind
+          <Link href="/" className="shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/urban-grind-logo.png" alt="Urban Grind Coffee Co." className="h-11 w-auto" />
           </Link>
           <CafeLink />
         </div>

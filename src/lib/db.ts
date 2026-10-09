@@ -210,9 +210,10 @@ function ensureVoteNetwork(db: DatabaseSync): void {
   if (!columns.some((column) => column.name === "network_hash")) {
     db.exec("ALTER TABLE photo_votes ADD COLUMN network_hash TEXT");
   }
-  db.exec(
-    "CREATE INDEX IF NOT EXISTS idx_photo_votes_network ON photo_votes (photo_id, network_hash, created_at)",
-  );
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_photo_votes_network ON photo_votes (photo_id, network_hash, created_at);
+    CREATE INDEX IF NOT EXISTS idx_photo_votes_network_recent ON photo_votes (network_hash, created_at);
+  `);
 }
 
 function ensureUploadPrepareColumns(db: DatabaseSync): void {

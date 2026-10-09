@@ -39,7 +39,8 @@ export type SquareOrder = {
   returns?: { created_at?: string; return_line_items?: SquareLine[] }[];
 };
 
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 5;
+const ORDER_ORIGIN = "https://www.urbangrind.ca";
 
 type SalesCache = { version: number; at: number; rangeStart: string; sales: DrinkSale[] };
 
@@ -121,13 +122,45 @@ function categoryNames(objects: readonly CatalogObject[]): Map<string, string> {
   return names;
 }
 
-function isDrinkItem(object: CatalogObject, names: ReadonlyMap<string, string>): boolean {
-  if (object.type !== "ITEM") return false;
-  const categoryIds = [
+function categoryIds(object: CatalogObject): string[] {
+  return [
     object.item_data?.category_id,
     ...(object.item_data?.categories ?? []).map((category) => category.id),
   ].filter((id): id is string => Boolean(id));
-  return categoryIds.some((id) => DRINK_CATEGORIES.has(normalizeCategory(names.get(id) ?? "")));
+}
+
+function drinkCategoryId(object: CatalogObject, names: ReadonlyMap<string, string>): string | null {
+  return categoryIds(object).find((id) => DRINK_CATEGORIES.has(normalizeCategory(names.get(id) ?? ""))) ?? null;
+}
+
+function isDrinkItem(object: CatalogObject, names: ReadonlyMap<string, string>): boolean {
+  return object.type === "ITEM" && drinkCategoryId(object, names) !== null;
+}
+
+/** Order page for one catalog item. The hash is that drink's Square category. */
+export function squareOrderUrl(locationId: string, itemId: string, categoryId: string): string | null {
+  if (![locationId, itemId, categoryId].every((id) => /^[A-Za-z0-9]+$/.test(id))) return null;
+  const url = new URL("/s/order", ORDER_ORIGIN);
+  url.searchParams.set("location", locationId);
+  url.searchParams.set("item", itemId);
+  url.hash = categoryId;
+  return url.toString();
+}
+
+/** The same order link for every size of a drink. */
+export function variationOrderUrls(objects: readonly CatalogObject[], locationId: string): Map<string, string> {
+  const names = categoryNames(objects);
+  const urls = new Map<string, string>();
+  for (const object of objects) {
+    if (!isDrinkItem(object, names) || !object.id) continue;
+    const categoryId = drinkCategoryId(object, names);
+    const url = categoryId ? squareOrderUrl(locationId, object.id, categoryId) : null;
+    if (!url) continue;
+    for (const variation of object.item_data?.variations ?? []) {
+      if (variation.id && !variation.is_deleted) urls.set(variation.id, url);
+    }
+  }
+  return urls;
 }
 
 /** Variation ids whose item sits in one of the drink categories. Sizes stay on that same item. */
@@ -203,14 +236,15 @@ export function salesFromOrders(
   allowed: ReadonlySet<string>,
   images: ReadonlyMap<string, string> = new Map(),
   descriptions: ReadonlyMap<string, string> = new Map(),
+  orderUrls: ReadonlyMap<string, string> = new Map(),
 ): DrinkSale[] {
   const sales: DrinkSale[] = [];
   for (const order of orders) {
     const soldAt = order.closed_at || order.created_at;
-    if (soldAt) pushLines(sales, order.line_items ?? [], allowed, images, descriptions, soldAt, 1);
+    if (soldAt) pushLines(sales, order.line_items ?? [], allowed, images, descriptions, orderUrls, soldAt, 1);
     for (const returned of order.returns ?? []) {
       const when = returned.created_at || soldAt;
-      if (when) pushLines(sales, returned.return_line_items ?? [], allowed, images, descriptions, when, -1);
+      if (when) pushLines(sales, returned.return_line_items ?? [], allowed, images, descriptions, orderUrls, when, -1);
     }
   }
   return sales;
@@ -222,6 +256,7 @@ function pushLines(
   allowed: ReadonlySet<string>,
   images: ReadonlyMap<string, string>,
   descriptions: ReadonlyMap<string, string>,
+  orderUrls: ReadonlyMap<string, string>,
   soldAt: string,
   sign: 1 | -1,
 ): void {
@@ -233,12 +268,14 @@ function pushLines(
     if (!id || !allowed.has(id) || !name || !Number.isFinite(quantity) || quantity <= 0) continue;
     const imageUrl = images.get(id);
     const description = descriptions.get(id);
+    const orderUrl = orderUrls.get(id);
     sales.push({
       name,
       quantity: sign * quantity,
       soldAt,
       ...(imageUrl ? { imageUrl } : {}),
       ...(description ? { description } : {}),
+      ...(orderUrl ? { orderUrl } : {}),
     });
   }
 }
@@ -247,7 +284,13 @@ async function fetchSquareDrinkSales(rangeStart: string): Promise<DrinkSale[]> {
   const locationId = process.env.SQUARE_LOCATION_ID?.trim() ?? "";
   const catalog = await listCatalog();
   const orders = await listCompletedOrders(locationId, rangeStart);
-  return salesFromOrders(orders, allowedVariationIds(catalog), variationImageUrls(catalog), variationDescriptions(catalog));
+  return salesFromOrders(
+    orders,
+    allowedVariationIds(catalog),
+    variationImageUrls(catalog),
+    variationDescriptions(catalog),
+    variationOrderUrls(catalog, locationId),
+  );
 }
 
 async function listCatalog(): Promise<CatalogObject[]> {

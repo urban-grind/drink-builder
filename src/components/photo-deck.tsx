@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CafeLink } from "@/components/cafe-link";
+import { ContestHeader, EnterButton } from "@/components/contest-header";
+import { ContestNav } from "@/components/contest-nav";
+import { requestPour } from "@/components/pour-pause";
 import { DrawEntryDialog } from "@/components/draw-entry-dialog";
 import { MyPhotos } from "@/components/my-photos";
 import { PhotoDetail } from "@/components/photo-detail";
@@ -172,16 +173,14 @@ export function PhotoDeck({ entryCode, drinkStats = false }: { entryCode?: strin
     return () => controller.abort();
   }, [ready, voterId, status, hasMore, photos.length]);
 
-  const bar: TabId | null =
-    screen === "entry"
+  const bar: "vote" | "mine" | "picks" | null =
+    screen === "entry" || screen === "faq" || (screen === "upload" && uploadBack === "faq")
       ? null
       : screen === "mine" || screen === "entered" || (screen === "upload" && (uploadBack === "mine" || uploadBack === "entered"))
         ? "mine"
-        : screen === "faq" || (screen === "upload" && uploadBack === "faq")
-          ? "faq"
-          : screen === "picks" || (screen === "upload" && uploadBack !== "vote")
-            ? "picks"
-            : "vote";
+        : screen === "picks" || (screen === "upload" && uploadBack !== "vote")
+          ? "picks"
+          : "vote";
   const current = photos[0] ?? null;
   const next = photos[1] ?? null;
   const deeper = photos[2] ?? null;
@@ -398,10 +397,12 @@ export function PhotoDeck({ entryCode, drinkStats = false }: { entryCode?: strin
 
   function goTab(tab: TabId, toSwipe = false) {
     if (screen === "entry") {
+      requestPour();
       router.push(toSwipe ? "/#swipe" : tab === "vote" ? "/" : `/?${tab}=1`);
       return;
     }
     if (tab === "vote") {
+      if (screen !== "vote") requestPour();
       if (window.location.search) router.replace("/", { scroll: false });
       setScreen("vote");
       if (toSwipe) {
@@ -413,6 +414,7 @@ export function PhotoDeck({ entryCode, drinkStats = false }: { entryCode?: strin
       return;
     }
     pendingSwipeScroll.current = false;
+    if (screen !== tab) requestPour();
     router.replace(`/?${tab}=1`);
     setScreen(tab);
   }
@@ -449,42 +451,37 @@ export function PhotoDeck({ entryCode, drinkStats = false }: { entryCode?: strin
 
   return (
     <div className={`relative flex w-full flex-col ${screen === "vote" || screen === "picks" || screen === "entry" || screen === "entered" ? "min-h-dvh" : "h-dvh"}`}>
-      <header className="sticky top-0 z-30 shrink-0 border-b border-[#274b3a]/12 bg-[#f3f2ef]/95 backdrop-blur-sm">
-        <div className="mx-auto flex w-full max-w-[26rem] items-center justify-between gap-4 px-5 pt-4 pb-3.5 md:max-w-7xl md:px-10 md:pt-6">
-        <div className="flex min-w-0 flex-col items-start gap-1.5 md:flex-row md:items-center md:gap-4">
+      <ContestHeader
+        logo={
           <button type="button" onClick={() => goTab("vote")} className="shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/urban-grind-logo.png" alt="Urban Grind Coffee Co." className="h-11 w-auto" />
           </button>
-          <CafeLink />
-        </div>
-        {screen === "upload" ? (
-          <button
-            type="button"
-            onClick={() => setScreen(uploadBack)}
-            className="inline-flex items-center gap-1 py-1 text-sm font-semibold text-[#274b3a]"
-          >
-            <CloseMark />
-            Close
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              if (screen === "entry") {
-                router.push("/?upload=1");
-                return;
-              }
-              setUploadBack(screen);
-              setScreen("upload");
-            }}
-            className="inline-flex items-center rounded-full border border-[#274b3a] bg-transparent px-3.5 py-2 text-sm font-semibold text-[#274b3a]"
-          >
-            + Enter
-          </button>
-        )}
-        </div>
-      </header>
+        }
+        action={
+          screen === "upload" ? (
+            <button
+              type="button"
+              onClick={() => setScreen(uploadBack)}
+              className="inline-flex items-center gap-1 py-1 text-sm font-semibold text-[#274b3a]"
+            >
+              <CloseMark />
+              Close
+            </button>
+          ) : (
+            <EnterButton
+              onClick={() => {
+                if (screen === "entry") {
+                  router.push("/?upload=1");
+                  return;
+                }
+                setUploadBack(screen);
+                setScreen("upload");
+              }}
+            />
+          )
+        }
+      />
 
       {screen === "vote" ? (
         <div className="mx-auto w-full max-w-[26rem] px-4 md:max-w-7xl md:px-10">
@@ -831,50 +828,20 @@ export function PhotoDeck({ entryCode, drinkStats = false }: { entryCode?: strin
       ) : null}
 
       {screen !== "upload" ? (
-      <nav aria-label="Contest" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))] md:px-10 md:pb-5">
-        <div className={`pointer-events-auto grid w-full ${drinkStats ? "max-w-[28rem] grid-cols-5" : "max-w-[24rem] grid-cols-4"} rounded-full bg-[#274b3a] px-1.5 py-1 shadow-[0_8px_22px_rgb(39_75_58/0.28)] md:max-w-7xl md:px-2 md:py-1.5`}>
-          {(
-            [
-              ["vote", "Vote"],
-              ["picks", "Leaderboard"],
-              ["mine", "My Entries"],
-              ["faq", "FAQs"],
-            ] as const
-          ).map(([tab, label]) => {
-            const selected = bar === tab;
-            return (
-            <button
-              key={tab}
-              type="button"
-              aria-current={selected ? "page" : undefined}
-              onClick={() => goTab(tab, tab === "vote")}
-              className={`flex flex-col items-center gap-0.5 rounded-full px-1.5 py-1 text-xs leading-none font-semibold whitespace-nowrap md:flex-row md:justify-center md:gap-2 md:px-4 md:py-2 md:text-base ${selected ? "bg-white text-[#274b3a]" : "text-white/85"}`}
-            >
-              {tab === "vote" ? <TabHeart filled={selected} /> : null}
-              {tab === "mine" ? <PhotoMark filled={selected} /> : null}
-              {tab === "picks" ? <TrophyMark /> : null}
-              {tab === "faq" ? <FaqMark /> : null}
-              {label}
-            </button>
-            );
-          })}
-          {drinkStats ? (
-            <Link
-              href="/top-drinks"
-              className="flex flex-col items-center gap-0.5 rounded-full px-1.5 py-1 text-xs leading-none font-semibold whitespace-nowrap text-white/85 md:flex-row md:justify-center md:gap-2 md:px-4 md:py-2 md:text-base"
-            >
-              <CupMark />
-              Drinks
-            </Link>
-          ) : null}
-        </div>
-      </nav>
+        <ContestNav current={bar} showDrinks={drinkStats} onSelect={(tab) => goTab(tab, tab === "vote")} />
       ) : null}
 
       {voterId ? (
         <DrawEntryDialog open={draw.open} required={draw.required} voterId={voterId} onDismiss={draw.dismiss} onSaved={draw.saved} />
       ) : null}
-      <WaysToWinDialog open={waysOpen} onClose={() => setWaysOpen(false)} />
+      <WaysToWinDialog
+        open={waysOpen}
+        onClose={() => setWaysOpen(false)}
+        onFaq={() => {
+          setWaysOpen(false);
+          goTab("faq");
+        }}
+      />
     </div>
   );
 }
@@ -908,57 +875,6 @@ function HeartMark() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 md:h-7 md:w-7" fill="currentColor">
       <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
-    </svg>
-  );
-}
-
-function TabHeart({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
-      <path d="M12 20.2s-6.6-4.1-6.6-8.6C5.4 8.7 7.1 7 9.3 7c1.2 0 2.3.6 2.7 1.5.4-.9 1.5-1.5 2.7-1.5 2.2 0 3.9 1.7 3.9 4.6 0 4.5-6.6 8.6-6.6 8.6z" />
-    </svg>
-  );
-}
-
-function PhotoMark({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
-      <rect x="4" y="5" width="16" height="14" rx="2" fill={filled ? "currentColor" : "none"} />
-      <circle cx="9" cy="10" r="1.4" fill={filled ? "white" : "currentColor"} stroke="none" />
-      <path d="M7 16l3.2-3.2a1 1 0 0 1 1.4 0L20 18" fill="none" stroke={filled ? "white" : "currentColor"} />
-    </svg>
-  );
-}
-
-function FaqMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="8.25" />
-      <path d="M9.6 9.4a2.4 2.4 0 1 1 3.3 2.2c-.8.4-1.3.9-1.3 1.8" />
-      <path d="M12 17h.01" />
-    </svg>
-  );
-}
-
-function CupMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 8h8.5a2.5 2.5 0 0 1 0 5H15" />
-      <path d="M7 5h8v8a4 4 0 0 1-8 0V5z" />
-      <path d="M8 20h8" />
-    </svg>
-  );
-}
-
-function TrophyMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 4h8v2.5a4 4 0 0 1-8 0V4z" />
-      <path d="M8 6H5.2A2.2 2.2 0 0 0 7.2 10" />
-      <path d="M16 6h2.8A2.2 2.2 0 0 1 16.8 10" />
-      <path d="M12 12.5V16" />
-      <path d="M9 20h6" />
-      <path d="M10 16h4v2a2 2 0 0 1-4 0v-2z" />
     </svg>
   );
 }
