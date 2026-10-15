@@ -58,7 +58,7 @@ describe("votes from one network", () => {
     else process.env.DRINK_DB_PATH = previousDb;
   });
 
-  it("allows one photo-page vote every five minutes from a network, on any photo", () => {
+  it("allows one photo-page vote every ten minutes from a network, on any photo", () => {
     const here = hashNetwork(randomUUID());
     const there = hashNetwork(randomUUID());
     const photoId = insertEntry();
@@ -85,7 +85,7 @@ describe("votes from one network", () => {
     assert.equal(castPhotoVote(insertEntry(), randomUUID(), here).ok, true);
   });
 
-  it("does not count a skip or a vote from outside the five-minute window", () => {
+  it("does not count a skip or a vote from outside the ten-minute window", () => {
     const here = hashNetwork(randomUUID());
     const photoId = insertEntry();
     assert.equal(swipeDeckPhoto(photoId, randomUUID(), "skip", here).ok, true);

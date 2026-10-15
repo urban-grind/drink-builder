@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 
 /** One yes vote per network, across every photo, inside this window. */
-export const NETWORK_VOTE_WINDOW_MS = 5 * 60 * 1000;
+export const NETWORK_VOTE_WINDOW_MS = 10 * 60 * 1000;
 
-export const NETWORK_VOTE_LIMIT_MESSAGE = "This location can vote again in 5 minutes.";
+export const NETWORK_VOTE_LIMIT_MESSAGE = "You can't vote on this photo again.";
 
 const HASH_PEPPER = "urban-grind-photo-network";
 
