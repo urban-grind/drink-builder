@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { PhotoDeck } from "@/components/photo-deck";
-import { drinkStatsEnabled } from "@/lib/drink-stats";
+import { NovemberWinners } from "@/components/november-winners";
 
 export const metadata: Metadata = {
-  title: { absolute: "Urban Grind Photo Content" },
-  description: "Swiping that won't get you in trouble.",
+  title: { absolute: "Urban Grind" },
+  description: "The three winners of free coffee for November at Urban Grind Coffee Co. in Barrie.",
 };
 
 export default function HomePage() {
-  return <PhotoDeck drinkStats={drinkStatsEnabled()} />;
+  return <NovemberWinners />;
 }

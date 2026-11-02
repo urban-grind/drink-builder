@@ -82,6 +82,22 @@ function PhotoMark({ filled }: { filled: boolean }) {
   );
 }
 
+export function NovemberSipsBar() {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[70] px-3 pb-[max(0.7rem,env(safe-area-inset-bottom))] md:px-6 md:pb-4">
+      <a
+        href="https://urbangrind.ca/menu"
+        className="pointer-events-auto mx-auto flex w-full max-w-2xl items-center justify-between gap-4 rounded-2xl bg-[#274b3a] px-5 py-3.5 text-[#f7f4ec] shadow-[0_12px_32px_rgb(39_75_58/0.35)] transition-colors hover:bg-[#1e3b2e] sm:px-6 sm:py-4"
+      >
+        <span className="text-[15px] leading-snug font-semibold sm:text-lg">Take a sneak peak at the November Menu</span>
+        <span aria-hidden="true" className="shrink-0 text-lg leading-none">
+          →
+        </span>
+      </a>
+    </div>
+  );
+}
+
 function CupMark() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
